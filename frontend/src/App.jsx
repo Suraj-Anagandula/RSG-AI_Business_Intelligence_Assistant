@@ -1,20 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Bot,
-  User,
+  Sparkles,
   Send,
   Upload,
-  RotateCcw,
+  Plus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Code,
   ChevronDown,
   ChevronUp,
-  Sparkles
+  RotateCcw,
+  BarChart3,
+  TrendingUp,
+  Compass,
+  Store,
+  DollarSign,
+  Package
 } from 'lucide-react';
 import DataVisualizer from './components/DataVisualizer';
 import ErrorBoundary from './components/ErrorBoundary';
 import { askQuestion, uploadCsvFile } from './services/apiService';
 
-// Highlights figures, percentages, currency, and quoted entity names in the answer
+// Renders numbers, currency, percentages, and quoted entities with clean highlight styling
 function renderHighlightedText(text) {
   if (!text) return null;
 
@@ -27,14 +34,7 @@ function renderHighlightedText(text) {
       return (
         <span
           key={i}
-          style={{
-            fontWeight: '700',
-            color: isQuote ? '#1d4ed8' : '#0f172a',
-            backgroundColor: isQuote ? '#eff6ff' : '#f1f5f9',
-            padding: '1px 5px',
-            borderRadius: '4px',
-            margin: '0 2px'
-          }}
+          className={isQuote ? 'highlight-entity' : 'highlight-pill'}
         >
           {part}
         </span>
@@ -48,12 +48,12 @@ export default function App() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hello! I am your AI Sales Assistant. Ask me any question about our sales, revenue, products, channels, or regional performance.',
+      content: 'Hello! I am your AI Business Intelligence Assistant. Ask me any question about our sales, revenue performance, product rankings, channels, or regional distributions.',
       followups: [
         'What is the total revenue?',
         'Which product generated the highest revenue?',
         'What is the monthly revenue trend?',
-        'Which sales channel is more profitable: Online or Retail?',
+        'Which sales channel has higher sales: Online or Retail?',
         'Which region generated the highest sales?'
       ]
     }
@@ -61,6 +61,7 @@ export default function App() {
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [notification, setNotification] = useState(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -82,9 +83,8 @@ export default function App() {
     const query = (questionText || input).trim();
     if (!query || isLoading) return;
 
-    // Add user message
-    const userMessage = { role: 'user', content: query };
-    setMessages((prev) => [...prev, userMessage]);
+    // Append user query
+    setMessages((prev) => [...prev, { role: 'user', content: query }]);
     setInput('');
     setIsLoading(true);
 
@@ -106,7 +106,7 @@ export default function App() {
         ...prev,
         {
           role: 'assistant',
-          content: err.message || 'An error occurred while analyzing your request.',
+          content: err.message || 'An error occurred while analyzing the dataset.',
           is_success: false
         }
       ]);
@@ -120,14 +120,14 @@ export default function App() {
     if (!file) return;
 
     try {
-      showNotification('Importing and updating sales data...');
+      showNotification('Cleaning and ingesting CSV into database...');
       const result = await uploadCsvFile(file);
       showNotification(`Success: ${result.message}`);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `Data Updated: Successfully loaded ${result.loaded_records} records into the sales database.`,
+          content: `Data Updated: Successfully loaded ${result.loaded_records} records into the PostgreSQL database.`,
           followups: ['What is the new total revenue?', 'Show top products']
         }
       ]);
@@ -138,11 +138,11 @@ export default function App() {
     }
   };
 
-  const handleClearChat = () => {
+  const handleNewChat = () => {
     setMessages([
       {
         role: 'assistant',
-        content: 'Chat cleared. Ask me any business question regarding sales, products, or revenue performance.',
+        content: 'New session started. Ask me any business question regarding sales, products, channels, or revenue performance.',
         followups: [
           'What is the total revenue?',
           'Which product generated the highest revenue?',
@@ -152,21 +152,46 @@ export default function App() {
     ]);
   };
 
-  return (
-    <div className="chat-app">
-      {/* Clean Header */}
-      <header className="chat-navbar">
-        <div className="brand-wrapper">
-          <div className="brand-badge">
-            <Bot size={20} />
-          </div>
-          <div>
-            <div className="brand-title">AI Sales Assistant</div>
-            <div className="brand-subtitle">Business Intelligence & Analytics</div>
-          </div>
-        </div>
+  const presetShortcuts = [
+    { label: 'Total Revenue', icon: <DollarSign size={15} />, query: 'What is the total revenue?' },
+    { label: 'Top Revenue Product', icon: <Package size={15} />, query: 'Which product generated the highest revenue?' },
+    { label: 'Monthly Trend', icon: <TrendingUp size={15} />, query: 'What is the monthly revenue trend?' },
+    { label: 'Regional Sales', icon: <Compass size={15} />, query: 'Which region generated the highest sales?' },
+    { label: 'Channel Comparison', icon: <Store size={15} />, query: 'Which sales channel is more profitable: Online or Retail?' }
+  ];
 
-        <div className="nav-actions">
+  return (
+    <div className="app-layout">
+      {/* ChatGPT-Style Sidebar */}
+      <aside className={`sidebar ${isSidebarOpen ? '' : 'closed'}`}>
+        <button className="new-chat-btn" onClick={handleNewChat} title="Start new conversation">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} />
+            <span>New inquiry</span>
+          </div>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>⌘K</span>
+        </button>
+
+        <div className="sidebar-section-title">Core Explorations</div>
+        <nav className="sidebar-nav-list">
+          {presetShortcuts.map((item, idx) => (
+            <button
+              key={idx}
+              className="sidebar-nav-item"
+              onClick={() => handleSend(item.query)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="status-indicator">
+            <div className="status-dot" />
+            <span>PostgreSQL 16 Connected</span>
+          </div>
+
           <input
             type="file"
             ref={fileInputRef}
@@ -175,161 +200,188 @@ export default function App() {
             onChange={handleFileUpload}
           />
           <button
-            className="nav-btn"
+            className="upload-action-btn"
             onClick={() => fileInputRef.current?.click()}
-            title="Import a new sales CSV in one click"
+            title="Import a new CSV into PostgreSQL"
           >
             <Upload size={14} />
-            <span>Import CSV</span>
-          </button>
-
-          <button className="nav-btn" onClick={handleClearChat} title="Clear conversation">
-            <RotateCcw size={14} />
-            <span>Reset</span>
+            <span>Import CSV to DB</span>
           </button>
         </div>
-      </header>
+      </aside>
 
-      {/* Messages Stream */}
-      <div className="messages-stream">
-        {messages.map((msg, idx) => (
-          <div key={idx} className={msg.role === 'user' ? 'message-row-user' : 'message-row-assistant'}>
-            {msg.role === 'assistant' && (
-              <div className="assistant-avatar">
-                <Bot size={18} />
-              </div>
-            )}
+      {/* Main Chat Column */}
+      <main className="main-chat-container">
+        {/* Top Glass Navbar */}
+        <header className="chat-glass-nav">
+          <div className="nav-left">
+            <button
+              className="toggle-sidebar-btn"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              title={isSidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            </button>
 
-            {msg.role === 'user' ? (
-              <div className="user-bubble">{msg.content}</div>
-            ) : (
-              <div className="assistant-content">
-                {/* Highlighted Clean Answer */}
-                <div className="assistant-text">
-                  {renderHighlightedText(msg.content)}
-                </div>
+            <div className="assistant-title-group">
+              <span className="gradient-title">AI Sales BI Assistant</span>
+            </div>
+          </div>
 
-                {/* Contextual Visualizer (Only when appropriate) */}
-                {msg.data && msg.data.length > 0 && (
-                  <ErrorBoundary>
-                    <DataVisualizer result={msg} />
-                  </ErrorBoundary>
-                )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="toggle-sidebar-btn"
+              onClick={handleNewChat}
+              title="Reset conversation"
+            >
+              <RotateCcw size={15} />
+            </button>
+          </div>
+        </header>
 
-                {/* Discrete Query View */}
-                {msg.sql && (
-                  <SqlAccordion sql={msg.sql} />
-                )}
-
-                {/* Dynamic Proactive Follow-ups */}
-                {msg.followups && msg.followups.length > 0 && (
-                  <div className="followups-container">
-                    <div className="followups-title">
-                      <Sparkles size={13} color="#2563eb" />
-                      <span>Suggested Follow-ups:</span>
+        {/* Scrollable Message Thread */}
+        <div className="chat-scroll-area">
+          <div className="chat-center-wrapper">
+            {messages.map((msg, idx) => (
+              <div key={idx}>
+                {msg.role === 'user' ? (
+                  <div className="chat-bubble-user-row">
+                    <div className="chat-bubble-user">{msg.content}</div>
+                  </div>
+                ) : (
+                  <div className="chat-bubble-assistant-row">
+                    <div className="assistant-avatar-glow">
+                      <Sparkles size={18} />
                     </div>
-                    <div className="followup-chips">
-                      {msg.followups.map((q, fIdx) => (
-                        <button
-                          key={fIdx}
-                          className="followup-chip"
-                          onClick={() => handleSend(q)}
-                        >
-                          {q}
-                        </button>
-                      ))}
+
+                    <div className="assistant-glass-card">
+                      {/* Highlighted Conversational Answer */}
+                      <div className="response-prose">
+                        {renderHighlightedText(msg.content)}
+                      </div>
+
+                      {/* Data-Adaptive Pictorial Representation */}
+                      {msg.data && msg.data.length > 0 && (
+                        <ErrorBoundary>
+                          <DataVisualizer result={msg} />
+                        </ErrorBoundary>
+                      )}
+
+                      {/* Discrete Query View */}
+                      {msg.sql && (
+                        <QueryAccordion sql={msg.sql} />
+                      )}
+
+                      {/* Contextual Proactive Follow-ups */}
+                      {msg.followups && msg.followups.length > 0 && (
+                        <div className="followups-wrapper">
+                          <div className="followups-headline">
+                            <Sparkles size={12} color="#2563eb" />
+                            <span>Suggested Follow-ups</span>
+                          </div>
+                          <div className="followups-pill-row">
+                            {msg.followups.map((q, fIdx) => (
+                              <button
+                                key={fIdx}
+                                className="followup-pill-btn"
+                                onClick={() => handleSend(q)}
+                              >
+                                {q}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        ))}
+            ))}
 
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div className="message-row-assistant">
-            <div className="assistant-avatar">
-              <Bot size={18} />
-            </div>
-            <div className="assistant-content" style={{ padding: '12px 18px' }}>
-              <div className="typing-dots">
-                <div className="dot" />
-                <div className="dot" />
-                <div className="dot" />
+            {/* Typing Loader */}
+            {isLoading && (
+              <div className="chat-bubble-assistant-row">
+                <div className="assistant-avatar-glow">
+                  <Sparkles size={18} />
+                </div>
+                <div className="assistant-glass-card" style={{ padding: '14px 20px', maxWidth: '100px' }}>
+                  <div className="typing-dots">
+                    <div className="dot" />
+                    <div className="dot" />
+                    <div className="dot" />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Bottom Input Area */}
-      <footer className="chat-input-wrapper">
-        <div className="preset-suggestions">
-          {[
-            'What is the total revenue?',
-            'Which product generated the highest revenue?',
-            'What is the monthly revenue trend?',
-            'Which sales channel has higher sales?',
-            'Which region generated the highest sales?'
-          ].map((promptText, pIdx) => (
-            <button
-              key={pIdx}
-              className="preset-chip"
-              onClick={() => handleSend(promptText)}
-            >
-              {promptText}
-            </button>
-          ))}
         </div>
 
-        <form
-          className="input-box-container"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-        >
-          <input
-            type="text"
-            className="chat-input-field"
-            placeholder="Ask a question about sales, products, revenue, or trends..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isLoading}
-          />
-          <button type="submit" className="send-btn" disabled={isLoading || !input.trim()}>
-            <Send size={15} />
-          </button>
-        </form>
-      </footer>
+        {/* Floating Glass Input Zone */}
+        <div className="floating-input-zone">
+          <div className="input-capsule-container">
+            {/* Quick Suggestions Pills */}
+            <div className="suggestions-horizontal-bar">
+              {[
+                'What is the total revenue?',
+                'Which product generated the highest revenue?',
+                'What is the monthly revenue trend?',
+                'Which sales channel is more profitable?',
+                'Which region generated the highest sales?'
+              ].map((promptText, pIdx) => (
+                <button
+                  key={pIdx}
+                  className="suggestion-pill-tag"
+                  onClick={() => handleSend(promptText)}
+                >
+                  {promptText}
+                </button>
+              ))}
+            </div>
 
-      {notification && <div className="toast-msg">{notification}</div>}
+            {/* Input Capsule */}
+            <form
+              className="input-glass-pill"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+            >
+              <input
+                type="text"
+                className="chat-textarea"
+                placeholder="Ask any question about sales, products, revenue, or trends..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={isLoading}
+              />
+              <button
+                type="submit"
+                className="glass-send-btn"
+                disabled={isLoading || !input.trim()}
+                title="Send query"
+              >
+                <Send size={15} />
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+
+      {notification && <div className="glass-toast">{notification}</div>}
     </div>
   );
 }
 
-function SqlAccordion({ sql }) {
+function QueryAccordion({ sql }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div style={{ marginTop: '10px' }}>
+    <div>
       <button
+        className="query-accordion-btn"
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: '#94a3b8',
-          fontSize: '11px',
-          fontWeight: '500',
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '2px 0'
-        }}
       >
         <Code size={12} />
         <span>{isOpen ? 'Hide Query' : 'View Query'}</span>
@@ -337,17 +389,7 @@ function SqlAccordion({ sql }) {
       </button>
 
       {isOpen && (
-        <pre style={{
-          marginTop: '6px',
-          backgroundColor: '#0f172a',
-          color: '#e2e8f0',
-          padding: '10px 14px',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontFamily: 'monospace',
-          overflowX: 'auto',
-          whiteSpace: 'pre-wrap'
-        }}>
+        <pre className="query-code-snippet">
           {sql}
         </pre>
       )}
