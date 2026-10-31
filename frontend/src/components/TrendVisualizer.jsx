@@ -15,8 +15,8 @@ export default function TrendVisualizer({ data }) {
 
   const maxVal = Math.max(...data.map(d => Number(d[valKey]) || 0));
   const isCurrency = (valKey || '').toLowerCase().includes('rev') ||
-                     (valKey || '').toLowerCase().includes('sale') ||
-                     (valKey || '').toLowerCase().includes('price');
+    (valKey || '').toLowerCase().includes('sale') ||
+    (valKey || '').toLowerCase().includes('price');
 
   return (
     <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', margin: '14px 0' }}>
