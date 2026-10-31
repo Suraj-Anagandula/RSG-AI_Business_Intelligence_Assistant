@@ -44,7 +44,7 @@ def execute_raw_sql(sql_query: str) -> list[dict]:
 
 
 def get_business_kpis() -> dict:
-    """Calculates overall KPI summary cards for dashboard header."""
+    """Calculates overall KPI summary cards and dashboard metrics for executive view."""
     sql = """
     SELECT 
         ROUND(COALESCE(SUM(CASE WHEN status = 'Completed' THEN net_revenue ELSE 0 END), 0)::numeric, 2) AS total_revenue,
@@ -61,13 +61,57 @@ def get_business_kpis() -> dict:
         "returned_orders": 0
     }
 
+    # Completion rate
+    total_o = kpis["total_orders"] or 1
+    kpis["completion_rate"] = round((kpis["completed_orders"] / total_o) * 100, 1)
+
     # Top revenue product
-    top_p = execute_raw_sql("SELECT product FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY SUM(net_revenue) DESC LIMIT 1;")
-    kpis["top_product"] = top_p[0]["product"] if top_p else "N/A"
+    top_p = execute_raw_sql("SELECT product, ROUND(SUM(net_revenue)::numeric, 2) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY revenue DESC LIMIT 1;")
+    if top_p:
+        kpis["top_product"] = top_p[0]["product"]
+        kpis["top_product_revenue"] = top_p[0]["revenue"]
+    else:
+        kpis["top_product"] = "N/A"
+        kpis["top_product_revenue"] = 0.0
 
     # Top revenue region
-    top_r = execute_raw_sql("SELECT region FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY SUM(net_revenue) DESC LIMIT 1;")
-    kpis["top_region"] = top_r[0]["region"] if top_r else "N/A"
+    top_r = execute_raw_sql("SELECT region, ROUND(SUM(net_revenue)::numeric, 2) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY revenue DESC LIMIT 1;")
+    if top_r:
+        kpis["top_region"] = top_r[0]["region"]
+        kpis["top_region_revenue"] = top_r[0]["revenue"]
+    else:
+        kpis["top_region"] = "N/A"
+        kpis["top_region_revenue"] = 0.0
+
+    # Monthly Trend
+    monthly = execute_raw_sql("""
+        SELECT 
+            TO_CHAR(order_date, 'YYYY-MM') AS month,
+            COUNT(*) AS orders,
+            ROUND(SUM(net_revenue)::numeric, 2) AS revenue
+        FROM sales_records
+        WHERE status = 'Completed'
+        GROUP BY month
+        ORDER BY month ASC;
+    """)
+    kpis["monthly_trend"] = monthly
+
+    # Channel stats
+    channels = execute_raw_sql("""
+        SELECT 
+            sales_channel AS channel,
+            COUNT(*) AS orders,
+            ROUND(SUM(net_revenue)::numeric, 2) AS revenue
+        FROM sales_records
+        WHERE status = 'Completed'
+        GROUP BY sales_channel
+        ORDER BY revenue DESC;
+    """)
+    kpis["channel_stats"] = channels
+
+    # Records for explorer
+    records = execute_raw_sql("SELECT transaction_id, order_date, product, category, region, sales_channel, quantity, unit_price, status, net_revenue FROM sales_records ORDER BY id ASC;")
+    kpis["records"] = records
 
     return kpis
 
@@ -178,13 +222,16 @@ def process_user_query(question: str) -> dict:
 
     # Check if question is completely non-business / out of scope
     if generated_sql == "CANNOT_ANSWER":
-        return make_response(
-            answer="I am your Sales BI Assistant. I can answer questions about sales, revenue, products, channels, discounts, and regional performance. Please ask a business question.",
-            q_type="out_of_scope",
-            success=False,
-            err="Question is out of scope.",
-            engine_src="AI Schema Grounding Guardrail"
-        )
+        has_business_terms = any(w in q_lower for w in ["sale", "revenue", "product", "month", "order", "region", "channel", "discount", "change", "trend", "catalog", "item"])
+        if not has_business_terms:
+            return make_response(
+                answer="I am your Sales BI Assistant. I can answer questions about sales, revenue, products, channels, discounts, and regional performance. Please ask a business question.",
+                q_type="out_of_scope",
+                success=False,
+                err="Question is out of scope.",
+                engine_src="AI Schema Grounding Guardrail"
+            )
+        generated_sql = ""
 
     # Fallback to verified SQL only if LLM is temporarily unreachable (network timeout / rate limit)
     if not generated_sql:
@@ -234,19 +281,25 @@ def process_user_query(question: str) -> dict:
                 engine_src="Gemini 3.5 Flash-Lite"
             )
 
-        # Generate conversational ChatGPT-style natural language response
-        natural_answer = generate_natural_answer(q_clean, data[:5])
+        # Provide up to 25 rows for AI summary context to ensure complete accuracy
+        summary_sample = data[:25] if len(data) > 25 else data
+        natural_answer = generate_natural_answer(q_clean, summary_sample, total_records=len(data))
         if not natural_answer:
-            # Deterministic, reliable answer formatter from data row if LLM is rate-limited
-            first_row = data[0]
-            items = []
-            for k, v in first_row.items():
-                k_label = k.replace("_", " ")
-                if isinstance(v, (int, float)):
-                    items.append(f"{k_label}: ${v:,.2f}" if "rev" in k or "price" in k or "sale" in k else f"{k_label}: {v:,}")
-                else:
-                    items.append(f"{k_label}: {v}")
-            natural_answer = f"The database query returned: {', '.join(items)}."
+            # Deterministic, reliable answer formatter from data rows if LLM is rate-limited
+            if len(data) == 1:
+                first_row = data[0]
+                items = []
+                for k, v in first_row.items():
+                    k_label = k.replace("_", " ").title()
+                    if isinstance(v, (int, float)):
+                        items.append(f"{k_label}: ${v:,.2f}" if any(x in k.lower() for x in ["rev", "price", "sale"]) else f"{k_label}: {v:,}")
+                    else:
+                        items.append(f"{k_label}: {v}")
+                natural_answer = f"The query returned: {', '.join(items)}."
+            else:
+                first_col = list(data[0].keys())[0]
+                sample_vals = [str(r.get(first_col, "")) for r in data]
+                natural_answer = f"Found {len(data)} items: {', '.join(sample_vals)}."
 
 
         # Dynamically generate follow-up recommendations

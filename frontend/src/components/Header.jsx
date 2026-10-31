@@ -1,58 +1,81 @@
-import React, { useRef } from 'react';
-import { Database, Upload } from 'lucide-react';
-import { uploadCsvFile } from '../services/apiService';
+import React from 'react';
+import { Sparkles, Search, Settings, PanelLeftClose, PanelLeftOpen, MessageSquare, LayoutDashboard } from 'lucide-react';
 
-export default function Header({ onCsvUploaded, showNotification }) {
-  const fileInputRef = useRef(null);
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-      showNotification('Uploading and cleaning CSV data...');
-      const result = await uploadCsvFile(file);
-      showNotification(`Success: ${result.message}`);
-      if (onCsvUploaded) {
-        onCsvUploaded();
-      }
-    } catch (err) {
-      showNotification(`Error: ${err.message}`);
-    } finally {
-      event.target.value = '';
-    }
-  };
-
+export default function Header({
+  activeTab = 'dashboard',
+  setActiveTab,
+  isDashboardOpen,
+  setIsDashboardOpen,
+  isChatOpen,
+  setIsChatOpen,
+}) {
   return (
-    <header className="app-header">
-      <div className="brand">
-        <div className="brand-icon">
-          <Database size={24} />
+    <header className="luminare-header">
+      {/* Brand Logo */}
+      <div className="header-brand">
+        <div className="brand-logo-badge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#ffffff" />
+          </svg>
         </div>
-        <div>
-          <h1 className="brand-title">AI Business Intelligence Assistant</h1>
-          <p className="brand-subtitle">Natural Language Querying for Sales Analytics</p>
-        </div>
+        <span className="brand-name">Luminare</span>
       </div>
 
-      <div className="header-actions">
-        <input
-          type="file"
-          ref={fileInputRef}
-          style={{ display: 'none' }}
-          accept=".csv"
-          onChange={handleFileChange}
-        />
+      {/* Navigation Pills */}
+      <nav className="header-nav">
         <button
-          className="upload-btn"
-          onClick={() => fileInputRef.current && fileInputRef.current.click()}
-          title="Upload a new CSV file to clean and export to database in one click"
+          className={`nav-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
         >
-          <Upload size={16} />
-          <span>Upload CSV to Database</span>
+          Dashboard
         </button>
+        <button
+          className={`nav-pill ${activeTab === 'performance' ? 'active' : ''}`}
+          onClick={() => setActiveTab('performance')}
+        >
+          Performance
+        </button>
+        <button
+          className={`nav-pill ${activeTab === 'records' ? 'active' : ''}`}
+          onClick={() => setActiveTab('records')}
+        >
+          Data Explorer
+        </button>
+      </nav>
+
+      {/* Right Controls */}
+      <div className="header-actions">
+        {/* Toggle Left Dashboard */}
+        <button
+          className="action-icon-btn"
+          onClick={() => setIsDashboardOpen(!isDashboardOpen)}
+          title={isDashboardOpen ? 'Collapse Left Dashboard' : 'Expand Left Dashboard'}
+        >
+          {isDashboardOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+        </button>
+
+        {/* Toggle Chat Assistant */}
+        <button
+          className={`action-icon-btn ${isChatOpen ? 'active-icon' : ''}`}
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          title={isChatOpen ? 'Hide Chat Assistant' : 'Show Chat Assistant'}
+        >
+          <MessageSquare size={16} />
+        </button>
+
+        <button className="action-icon-btn" title="Search Analytics">
+          <Search size={16} />
+        </button>
+        <button className="action-icon-btn" title="Settings">
+          <Settings size={16} />
+        </button>
+
+        {/* User Avatar */}
+        <div className="user-avatar" title="Executive User">
+          <span className="avatar-text">AI</span>
+          <span className="online-indicator"></span>
+        </div>
       </div>
     </header>
   );
 }
-
