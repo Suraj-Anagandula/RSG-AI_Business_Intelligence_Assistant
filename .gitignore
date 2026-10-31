@@ -1,9 +1,18 @@
+# Environment & Secrets
+.env
+.env.*
+*.env
+backend/.env
+!*.env.example
+
 # Virtual environment
 venv/
-.env.local
+.venv/
+env/
 
 # Database data
 postgres_data/
+pgdata*/
 *.log
 
 # Python cache
@@ -15,6 +24,7 @@ __pycache__/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+dist/
 
 # OS / Editor files
 .DS_Store

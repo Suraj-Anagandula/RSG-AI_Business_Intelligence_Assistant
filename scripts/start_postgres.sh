@@ -1,8 +1,9 @@
 #!/bin/bash
 # Script to initialize and start local PostgreSQL for the project
 
-PG_DATA_DIR="/home/user/suraj_project/postgres_data"
-PG_BIN_DIR="/usr/lib/postgresql/16/bin"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PG_DATA_DIR="$PROJECT_DIR/postgres_data"
+PG_BIN_DIR="${PG_BIN_DIR:-/usr/lib/postgresql/16/bin}"
 PG_PORT=5433
 PG_USER="postgres"
 PG_DB="sales_bi_db"

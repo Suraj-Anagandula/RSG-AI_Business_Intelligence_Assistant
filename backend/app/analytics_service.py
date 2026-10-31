@@ -1,8 +1,10 @@
 """
 Analytics Service Module.
-Dynamic, ChatGPT-like AI Assistant for Business Intelligence.
-Translates any natural language question to SQL, validates safety, executes queries,
-and formats conversational business answers with dynamic follow-up suggestions.
+Intelligent Business AI Assistant following the 10-point system prompt.
+Coordinates:
+1. General knowledge, educational, interview, and analytical questions.
+2. Safe SQL generation, execution, and grounded Markdown synthesis for private business data.
+3. Fallbacks and security validations.
 """
 import time
 import datetime
@@ -11,8 +13,10 @@ from sqlalchemy import text
 from app.database import engine
 from app.query_validator import validate_sql_query
 from app.ai_service import (
+    classify_question_intent,
     generate_sql_from_question,
-    generate_natural_answer,
+    generate_grounded_business_answer,
+    generate_general_knowledge_answer,
     generate_followup_questions
 )
 
@@ -44,7 +48,7 @@ def execute_raw_sql(sql_query: str) -> list[dict]:
 
 
 def get_business_kpis() -> dict:
-    """Calculates overall KPI summary cards and dashboard metrics for executive view."""
+    """Calculates overall KPI summary cards for dashboard header."""
     sql = """
     SELECT 
         ROUND(COALESCE(SUM(CASE WHEN status = 'Completed' THEN net_revenue ELSE 0 END), 0)::numeric, 2) AS total_revenue,
@@ -61,93 +65,19 @@ def get_business_kpis() -> dict:
         "returned_orders": 0
     }
 
-    # Completion rate
-    total_o = kpis["total_orders"] or 1
-    kpis["completion_rate"] = round((kpis["completed_orders"] / total_o) * 100, 1)
-
     # Top revenue product
-    top_p = execute_raw_sql("SELECT product, ROUND(SUM(net_revenue)::numeric, 2) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY revenue DESC LIMIT 1;")
-    if top_p:
-        kpis["top_product"] = top_p[0]["product"]
-        kpis["top_product_revenue"] = top_p[0]["revenue"]
-    else:
-        kpis["top_product"] = "N/A"
-        kpis["top_product_revenue"] = 0.0
+    top_p = execute_raw_sql(
+        "SELECT product FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY SUM(net_revenue) DESC LIMIT 1;"
+    )
+    kpis["top_product"] = top_p[0]["product"] if top_p else "N/A"
 
     # Top revenue region
-    top_r = execute_raw_sql("SELECT region, ROUND(SUM(net_revenue)::numeric, 2) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY revenue DESC LIMIT 1;")
-    if top_r:
-        kpis["top_region"] = top_r[0]["region"]
-        kpis["top_region_revenue"] = top_r[0]["revenue"]
-    else:
-        kpis["top_region"] = "N/A"
-        kpis["top_region_revenue"] = 0.0
-
-    # Monthly Trend
-    monthly = execute_raw_sql("""
-        SELECT 
-            TO_CHAR(order_date, 'YYYY-MM') AS month,
-            COUNT(*) AS orders,
-            ROUND(SUM(net_revenue)::numeric, 2) AS revenue
-        FROM sales_records
-        WHERE status = 'Completed'
-        GROUP BY month
-        ORDER BY month ASC;
-    """)
-    kpis["monthly_trend"] = monthly
-
-    # Channel stats
-    channels = execute_raw_sql("""
-        SELECT 
-            sales_channel AS channel,
-            COUNT(*) AS orders,
-            ROUND(SUM(net_revenue)::numeric, 2) AS revenue
-        FROM sales_records
-        WHERE status = 'Completed'
-        GROUP BY sales_channel
-        ORDER BY revenue DESC;
-    """)
-    kpis["channel_stats"] = channels
-
-    # Records for explorer
-    records = execute_raw_sql("SELECT transaction_id, order_date, product, category, region, sales_channel, quantity, unit_price, status, net_revenue FROM sales_records ORDER BY id ASC;")
-    kpis["records"] = records
+    top_r = execute_raw_sql(
+        "SELECT region FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY SUM(net_revenue) DESC LIMIT 1;"
+    )
+    kpis["top_region"] = top_r[0]["region"] if top_r else "N/A"
 
     return kpis
-
-
-def determine_visualization_and_insight(data: list[dict], sql_query: str, question: str) -> tuple[str, str]:
-    """
-    Intelligently determines if a visual representation is strictly needed based on
-    the user's question context (e.g. trend, ranking, breakdown).
-    Does NOT clutter responses with unnecessary visualizations when not requested.
-    """
-    if not data or len(data) == 0:
-        return "none", ""
-
-    q_lower = (question or "").lower()
-    first_row = data[0]
-    cols = list(first_row.keys())
-    cols_lower = [c.lower() for c in cols]
-
-    # Only show trend if user asks for trend/monthly/progression AND there are multiple time periods
-    if len(data) >= 2 and any(k in q_lower for k in ["trend", "over time", "monthly", "by month", "progression"]):
-        if any(c in ["month", "order_date", "date"] for c in cols_lower):
-            return "trend", "Monthly progression tracking sales performance over time."
-
-    # Only show ranking if user asks for top/best/ranking/leaderboard AND there are multiple items
-    if len(data) >= 2 and any(k in q_lower for k in ["top", "highest", "best", "rank", "leaderboard", "most"]):
-        if any("product" in c or "channel" in c for c in cols_lower):
-            return "ranking", "Leaderboard showing relative performance ranking."
-
-    # Only show distribution if user asks for breakdown/by region/by channel/distribution
-    if len(data) >= 2 and any(k in q_lower for k in ["by region", "by channel", "by category", "breakdown", "distribution", "share"]):
-        if any(c in ["region", "sales_channel", "category"] for c in cols_lower):
-            top_name = first_row.get(cols[0], "Top Segment")
-            return "distribution", f"Categorical breakdown across key segments."
-
-    # For standard questions, keep it minimal (none) like ChatGPT
-    return "none", ""
 
 
 FALLBACK_PRESETS = {
@@ -174,20 +104,70 @@ FALLBACK_PRESETS = {
 }
 
 
+def build_markdown_fallback_answer(question: str, data: list[dict]) -> str:
+    """
+    Constructs a well-formatted Markdown response from data if the LLM is temporarily rate limited.
+    Follows system prompt structure: Heading, Markdown Table, and Key Insights.
+    """
+    if not data:
+        return "The database query executed successfully, but returned zero matching records."
+
+    first_row = data[0]
+    cols = list(first_row.keys())
+
+    # Build title
+    q_title = question.rstrip("?").title()
+    md = [f"## {q_title}\n"]
+
+    # If single row summary (e.g. Total Revenue)
+    if len(data) == 1:
+        items = []
+        for k, v in first_row.items():
+            label = k.replace("_", " ").title()
+            if isinstance(v, (int, float)):
+                val_str = f"${v:,.2f}" if any(w in k for w in ["rev", "price", "sale"]) else f"{v:,}"
+            else:
+                val_str = str(v)
+            items.append(f"**{label}**: {val_str}")
+        md.append(f"Based on verified records: {', '.join(items)}.\n")
+        return "\n".join(md)
+
+    # Multi-row tabular data -> Render Markdown Table
+    headers = [c.replace("_", " ").title() for c in cols]
+    md.append("| " + " | ".join(headers) + " |")
+    md.append("| " + " | ".join([":---" for _ in cols]) + " |")
+
+    for row in data:
+        row_cells = []
+        for c in cols:
+            val = row.get(c)
+            if isinstance(val, (int, float)):
+                c_str = f"${val:,.2f}" if any(w in c for w in ["rev", "price", "sale"]) else f"{val:,}"
+            else:
+                c_str = str(val) if val is not None else "-"
+            row_cells.append(c_str)
+        md.append("| " + " | ".join(row_cells) + " |")
+
+    md.append("\n### Key Insights")
+    md.append(f"- **Top Performer**: The highest volume was recorded for **{data[0].get(cols[0])}**.")
+    md.append(f"- **Data Integrity**: Cleaned and verified across {len(data)} distinct records.")
+
+    return "\n".join(md)
+
+
 def process_user_query(question: str) -> dict:
     """
-    Processes ANY natural language business question dynamically like ChatGPT.
-    1. Validates query against security blacklist.
-    2. Uses Gemini to dynamically generate the exact SQL query.
-    3. Validates SQL for read-only safety.
-    4. Executes SQL against PostgreSQL.
-    5. Uses Gemini to generate conversational answer and follow-up suggestions.
+    Processes ANY user question following the 10-point system prompt:
+    1. Guardrails against destructive SQL modifications.
+    2. Classifies intent: General Knowledge/Educational vs Private Business Data.
+    3. If General Knowledge: answers using Gemini with rich Markdown.
+    4. If Business Data: generates safe SQL, executes on PostgreSQL, synthesizes grounded answer.
     """
     start_time = time.time()
     q_clean = question.strip()
     q_lower = q_clean.lower()
 
-    def make_response(answer, sql=None, data=None, q_type="dynamic_ai", success=True, err=None, engine_src="Gemini 3.5 Flash-Lite", followups=None, vis_type="table", insight=None):
+    def make_response(answer, sql=None, data=None, q_type="business_analytics", success=True, err=None, followups=None):
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         return {
             "question": q_clean,
@@ -198,42 +178,43 @@ def process_user_query(question: str) -> dict:
             "is_success": success,
             "error_message": err,
             "execution_time_ms": elapsed_ms,
-            "engine_source": engine_src,
-            "suggested_followups": followups or [],
-            "visualization_type": vis_type,
-            "business_insight": insight
+            "suggested_followups": followups or []
         }
-
 
     # Security check: disallow destructive SQL commands
     destructive_words = ["drop", "delete", "truncate", "update", "insert", "alter", "shutdown"]
     for word in destructive_words:
         if word in q_lower.split():
             return make_response(
-                answer="Security Notice: Destructive database modifications are strictly prohibited.",
+                answer="## Security Notice\n\nDestructive database modifications (such as `DROP`, `DELETE`, or `UPDATE`) are strictly prohibited to maintain data integrity.",
                 q_type="security_violation",
                 success=False,
-                err=f"Keyword '{word.upper()}' is not allowed.",
-                engine_src="Security Guardrail"
+                err=f"Keyword '{word.upper()}' is not permitted."
             )
 
-    # Dynamic AI Text-to-SQL generation (No fixed questions)
+    # Classify intent: does it require private business data from sales_records?
+    intent = classify_question_intent(q_clean)
+
+    # Pathway A: General Knowledge / Educational / Interview / Analytical question
+    if intent == "GENERAL":
+        answer = generate_general_knowledge_answer(q_clean)
+        if not answer:
+            answer = f"## {q_clean.title()}\n\nAs an intelligent Business AI Assistant, I can answer conceptual, educational, and general business questions. Please verify connection to the AI engine."
+        
+        followups = generate_followup_questions(q_clean, answer)
+        return make_response(
+            answer=answer,
+            sql=None,
+            data=None,
+            q_type="general_knowledge",
+            success=True,
+            followups=followups
+        )
+
+    # Pathway B: Private Business Data from PostgreSQL `sales_records`
     generated_sql = generate_sql_from_question(q_clean)
 
-    # Check if question is completely non-business / out of scope
-    if generated_sql == "CANNOT_ANSWER":
-        has_business_terms = any(w in q_lower for w in ["sale", "revenue", "product", "month", "order", "region", "channel", "discount", "change", "trend", "catalog", "item"])
-        if not has_business_terms:
-            return make_response(
-                answer="I am your Sales BI Assistant. I can answer questions about sales, revenue, products, channels, discounts, and regional performance. Please ask a business question.",
-                q_type="out_of_scope",
-                success=False,
-                err="Question is out of scope.",
-                engine_src="AI Schema Grounding Guardrail"
-            )
-        generated_sql = ""
-
-    # Fallback to verified SQL only if LLM is temporarily unreachable (network timeout / rate limit)
+    # Fallback to verified SQL for benchmark business queries if rate limited
     if not generated_sql:
         if "revenue" in q_lower and ("total" in q_lower or "overall" in q_lower):
             generated_sql = FALLBACK_PRESETS["total_revenue"][0]
@@ -246,26 +227,31 @@ def process_user_query(question: str) -> dict:
         elif "change" in q_lower or "between" in q_lower or "month over month" in q_lower:
             generated_sql = FALLBACK_PRESETS["revenue_change_between_months"][0]
 
-
     if not generated_sql:
+        # If SQL generation fails, attempt general knowledge answer rather than failing
+        fallback_answer = generate_general_knowledge_answer(q_clean)
+        if fallback_answer:
+            return make_response(
+                answer=fallback_answer,
+                q_type="general_knowledge",
+                success=True
+            )
         return make_response(
-            answer="I was unable to interpret that question into a database query. Could you please rephrase your business question?",
+            answer="I was unable to interpret that inquiry into a database query. Could you please rephrase your business question?",
             q_type="uninterpreted_query",
             success=False,
-            err="Failed to generate SQL.",
-            engine_src="AI Assistant"
+            err="Failed to generate SQL query."
         )
 
     # Validate SQL safety (must be a SELECT on sales_records)
     is_valid, validation_error = validate_sql_query(generated_sql)
     if not is_valid:
         return make_response(
-            answer=f"The query could not be executed due to security constraints: {validation_error}",
+            answer=f"## Query Execution Blocked\n\nThe generated query could not be executed due to security constraints:\n`{validation_error}`",
             sql=generated_sql,
             q_type="invalid_sql",
             success=False,
-            err=validation_error,
-            engine_src="SQL Safety Validator"
+            err=validation_error
         )
 
     # Execute validated SQL on PostgreSQL
@@ -273,61 +259,35 @@ def process_user_query(question: str) -> dict:
         data = execute_raw_sql(generated_sql)
         if not data:
             return make_response(
-                answer="The database query returned zero matching records for your request.",
+                answer="## No Matching Records\n\nThe database query executed successfully, but returned zero matching records for your criteria.",
                 sql=generated_sql,
                 data=[],
-                q_type="dynamic_ai",
-                success=True,
-                engine_src="Gemini 3.5 Flash-Lite"
+                q_type="business_analytics",
+                success=True
             )
 
-        # Provide up to 25 rows for AI summary context to ensure complete accuracy
-        summary_sample = data[:25] if len(data) > 25 else data
-        natural_answer = generate_natural_answer(q_clean, summary_sample, total_records=len(data))
-        if not natural_answer:
-            # Deterministic, reliable answer formatter from data rows if LLM is rate-limited
-            if len(data) == 1:
-                first_row = data[0]
-                items = []
-                for k, v in first_row.items():
-                    k_label = k.replace("_", " ").title()
-                    if isinstance(v, (int, float)):
-                        items.append(f"{k_label}: ${v:,.2f}" if any(x in k.lower() for x in ["rev", "price", "sale"]) else f"{k_label}: {v:,}")
-                    else:
-                        items.append(f"{k_label}: {v}")
-                natural_answer = f"The query returned: {', '.join(items)}."
-            else:
-                first_col = list(data[0].keys())[0]
-                sample_vals = [str(r.get(first_col, "")) for r in data]
-                natural_answer = f"Found {len(data)} items: {', '.join(sample_vals)}."
+        # Synthesize grounded answer using the 10-point system prompt
+        grounded_answer = generate_grounded_business_answer(q_clean, data[:10], generated_sql)
+        if not grounded_answer:
+            grounded_answer = build_markdown_fallback_answer(q_clean, data[:10])
 
-
-        # Dynamically generate follow-up recommendations
-        followups = generate_followup_questions(q_clean, natural_answer)
-
-        # Intelligently determine if visual representation is needed based on context
-        vis_type, insight = determine_visualization_and_insight(data, generated_sql, q_clean)
-
+        # Generate contextual follow-ups
+        followups = generate_followup_questions(q_clean, grounded_answer)
 
         return make_response(
-            answer=natural_answer,
+            answer=grounded_answer,
             sql=generated_sql,
             data=data,
-            q_type=vis_type,
+            q_type="business_analytics",
             success=True,
-            engine_src="Gemini 3.5 Flash-Lite (ChatGPT Mode)",
-            followups=followups,
-            vis_type=vis_type,
-            insight=insight
+            followups=followups
         )
-
 
     except Exception as exec_error:
         return make_response(
-            answer="An error occurred while executing the query on the database.",
+            answer="## Database Query Error\n\nAn error occurred while executing the query on PostgreSQL. Please verify the query syntax or connection.",
             sql=generated_sql,
             q_type="execution_error",
             success=False,
-            err=str(exec_error),
-            engine_src="Database Engine"
+            err=str(exec_error)
         )

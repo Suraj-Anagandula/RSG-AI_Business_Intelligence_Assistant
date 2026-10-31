@@ -37,19 +37,13 @@ class SampleQuestionItem(BaseModel):
 
 
 class BusinessSummaryResponse(BaseModel):
-    """Schema for high-level business KPI metrics and executive dashboard cards."""
+    """Schema for high-level business KPI metrics."""
     total_revenue: float
     total_orders: int
     completed_orders: int
     returned_orders: int
-    completion_rate: Optional[float] = 98.0
     top_product: str
-    top_product_revenue: Optional[float] = 0.0
     top_region: str
-    top_region_revenue: Optional[float] = 0.0
-    monthly_trend: Optional[list[dict[str, Any]]] = []
-    channel_stats: Optional[list[dict[str, Any]]] = []
-    records: Optional[list[dict[str, Any]]] = []
 
 
 class CsvUploadResponse(BaseModel):

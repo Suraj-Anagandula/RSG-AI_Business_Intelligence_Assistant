@@ -155,7 +155,9 @@ def process_and_load_csv(csv_path: str) -> dict:
 
 if __name__ == "__main__":
     import sys
-    test_csv = "/home/user/suraj_project/data/sales_data_raw.csv"
+    from pathlib import Path
+    default_csv = Path(__file__).resolve().parents[2] / "data" / "sales_data_raw.csv"
+    test_csv = str(default_csv)
     if len(sys.argv) > 1:
         test_csv = sys.argv[1]
     result_stats = process_and_load_csv(test_csv)

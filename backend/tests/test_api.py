@@ -100,14 +100,14 @@ def test_dynamic_unscripted_business_question():
     assert len(data["data"]) > 0
 
 
-def test_invalid_out_of_scope_question():
-    """Test out-of-scope general knowledge question."""
+def test_general_knowledge_question_supported():
+    """Test general knowledge / educational question is answered with rich markdown without restriction."""
     response = client.post("/api/ask", json={"question": "What is the capital of France?"})
     assert response.status_code == 200
     data = response.json()
-    assert data["is_success"] is False
-    assert data["query_type"] == "out_of_scope"
-    assert "sales" in data["answer"].lower() or "business" in data["answer"].lower()
+    assert data["is_success"] is True
+    assert data["query_type"] == "general_knowledge"
+    assert "Paris" in data["answer"]
 
 
 def test_security_destructive_query_blocked():
@@ -170,5 +170,7 @@ TXN1003,03-01-2026,Keyboard,Accessories,East,Online,0,900,0,Completed
     assert data["loaded_records"] == 2
 
     # Reload original dataset to leave DB in clean state
+    from pathlib import Path
     from app.data_cleaner import process_and_load_csv
-    process_and_load_csv("/home/user/suraj_project/data/sales_data_raw.csv")
+    orig_csv = str(Path(__file__).resolve().parents[2] / "data" / "sales_data_raw.csv")
+    process_and_load_csv(orig_csv)

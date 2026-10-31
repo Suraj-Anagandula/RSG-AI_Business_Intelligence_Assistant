@@ -37,7 +37,7 @@ During the development of this challenge, the following AI tools and models were
 ### Problem 1: System PostgreSQL Peer Authentication Failure
 - **Symptom**: Attempting to connect to the pre-existing system PostgreSQL on port `5432` failed with `FATAL: Peer authentication failed for user "postgres"`, and `sudo` required a password.
 - **Root Cause**: The system PostgreSQL installation had `peer` authentication configured for local unix sockets, which requires matching OS user accounts or root privilege.
-- **Debugging & Resolution**: Created an independent, user-owned PostgreSQL 16 cluster in `/home/user/suraj_project/postgres_data` using `/usr/lib/postgresql/16/bin/initdb` with `--auth=trust` on dedicated port `5433`. Automated this into `scripts/start_postgres.sh`.
+- **Debugging & Resolution**: Created an independent, user-owned PostgreSQL cluster in `./postgres_data` using `initdb` with `--auth=trust` on dedicated port `5433` (or port `5432` on Windows). Automated this into `scripts/start_postgres.sh` and platform launchers.
 
 ### Problem 2: SQLAlchemy 2.0 Driver Default Behavior
 - **Symptom**: SQLAlchemy failed with `ModuleNotFoundError: No module named 'psycopg'` when connecting to PostgreSQL.

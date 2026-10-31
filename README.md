@@ -45,7 +45,7 @@ Built strictly according to the **GET AI-Assisted Development Challenge** specif
 ## Project Structure
 
 ```text
-suraj_project/
+ai_bi_assistant/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
@@ -60,22 +60,18 @@ suraj_project/
 │   │   └── analytics_service.py     # Deterministic query executor and coordinator
 │   ├── tests/
 │   │   ├── __init__.py
-│   │   └── test_api.py              # 13 automated test cases
+│   │   └── test_api.py              # Automated test suite
 │   └── requirements.txt             # Backend dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                  # Main dashboard layout
+│   │   ├── App.jsx                  # Main dashboard layout & state
 │   │   ├── components/
-│   │   │   ├── Header.jsx           # App title & 1-click CSV upload button
-│   │   │   ├── KpiCards.jsx         # KPI summary cards
-│   │   │   ├── SamplePills.jsx      # Preset question buttons
-│   │   │   ├── SearchBox.jsx        # Question input with loading spinner
-│   │   │   ├── AnswerCard.jsx       # Answer text, telemetry, SQL toggle, follow-ups
-│   │   │   ├── TrendChart.jsx       # Monthly revenue bar chart visualizer
-│   │   │   └── DataTable.jsx        # Supporting records table with CSV export
+│   │   │   ├── ChartVisualizer.jsx  # Interactive trends and charts
+│   │   │   ├── ErrorBoundary.jsx    # React UI error boundary
+│   │   │   └── MarkdownResponse.jsx # Formatted answer response renderer
 │   │   ├── services/
 │   │   │   └── apiService.js        # API caller to backend
-│   │   ├── index.css                # Clean CSS styling
+│   │   ├── index.css                # Monochromatic modern styling
 │   │   └── main.jsx
 │   ├── package.json
 │   └── vite.config.js
@@ -84,12 +80,15 @@ suraj_project/
 │   ├── AI_DEVELOPMENT_LOG.md        # AI tools, challenges, debugging, and future work
 │   └── INTERVIEW_PREP.md            # Answers for interview topics (Agentic AI, RAG, etc.)
 ├── scripts/
-│   ├── start_postgres.sh            # Script to initialize and start local PostgreSQL
-│   └── run_app.sh                   # Runner script starting DB, backend, and frontend
+│   ├── start_postgres.sh            # Script to initialize and start local PostgreSQL (Linux/macOS)
+│   ├── run_app.sh                   # Runner script starting DB, backend, and frontend (Linux/macOS)
+│   ├── run_app.bat                  # One-click runner script for Windows
+│   └── run_app.ps1                  # PowerShell runner script for Windows
 ├── data/
 │   └── sales_data_raw.csv           # Raw sales CSV file
 ├── README.md                        # Documentation
-└── .env                             # Environment variables & secrets
+├── .env.example                     # Environment template (safe for VCS)
+└── .gitignore                       # Ignored files (secrets, venv, node_modules)
 ```
 
 ---

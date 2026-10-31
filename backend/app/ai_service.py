@@ -1,7 +1,12 @@
 """
 AI Service Module using Google Gemini.
-Handles natural language to SQL translation and natural language answer generation.
-Includes grounding against the sales_records database schema and business rules.
+Implements the 10-point Business AI Assistant system prompt.
+Handles:
+1. Intent classification (General Knowledge vs Database Inquiry).
+2. Natural language to safe PostgreSQL SELECT translation.
+3. Grounded business intelligence synthesis with structured Markdown.
+4. General knowledge, educational, analytical, and interview answers.
+5. Dynamic follow-up recommendations.
 """
 import os
 import re
@@ -16,51 +21,135 @@ if GEMINI_API_KEY:
     except Exception as err:
         print(f"[AI Service] Warning: Failed to initialize Gemini client: {err}")
 
-# Database schema representation for system prompt grounding
-DATABASE_SCHEMA_PROMPT = """
-You are a specialized business intelligence SQL assistant.
-You translate natural language questions into PostgreSQL queries for the table `sales_records`.
+# System prompt exactly as specified
+SYSTEM_PROMPT = """You are an intelligent Business AI Assistant.
+
+Your responsibilities:
+
+1. Understand the actual intent behind every user question.
+2. Answer general knowledge, educational, interview,
+   analytical and business-related questions.
+3. Never restrict responses to information directly
+   available in the business database.
+4. Use general knowledge when the question does not
+   require private business data.
+5. When business data is required:
+   - Retrieve relevant records.
+   - Combine information from multiple sources.
+   - Perform calculations using Python or SQL.
+   - Compare trends and identify patterns.
+   - Explain conclusions using evidence.
+6. Distinguish facts, assumptions and predictions.
+7. Never invent business metrics or claim that
+   unavailable data was retrieved.
+8. If information is insufficient, explain what is
+   missing and provide the best possible partial answer.
+9. For complex questions, break the problem into
+   smaller reasoning steps.
+10. Give clear, relevant, well-structured answers.
+
+Response requirements:
+- Use meaningful Markdown.
+- Use headings, lists and tables where appropriate.
+- Explain technical concepts in understandable language.
+- Include examples when useful.
+- Avoid unnecessary repetition."""
+
+# Schema instructions for SQL generation targeting sales_records
+SQL_TRANSLATION_PROMPT = """You are a specialized SQL translator for PostgreSQL.
+Convert natural language questions into safe, read-only SELECT queries for table `sales_records`.
 
 Table: sales_records
 Columns:
 - id: integer (primary key)
 - transaction_id: varchar (e.g. 'TXN0001')
-- order_date: date (format: YYYY-MM-DD, e.g. '2026-01-03')
-- product: varchar (e.g. 'Laptop Stand', 'Wireless Mouse', 'Office Chair', 'Monitor', 'Keyboard', 'Desk', 'USB-C Hub')
-- category: varchar (e.g. 'Accessories', 'Furniture', 'Electronics')
-- region: varchar (e.g. 'North', 'South', 'East', 'West')
-- sales_channel: varchar (e.g. 'Online', 'Retail')
-- quantity: integer (number of units)
+- order_date: date (YYYY-MM-DD)
+- product: varchar ('Monitor', 'Keyboard', 'Office Chair', 'Desk', 'Laptop Stand', etc.)
+- category: varchar ('Electronics', 'Furniture', 'Accessories')
+- region: varchar ('North', 'South', 'East', 'West')
+- sales_channel: varchar ('Online', 'Retail')
+- quantity: integer
 - unit_price: double precision
 - discount_amount: double precision
 - status: varchar ('Completed' or 'Returned')
 - net_revenue: double precision (pre-calculated: (quantity * unit_price) - discount_amount)
 
-CRITICAL BUSINESS RULES:
-1. Always filter by `status = 'Completed'` for all sales, revenue, and product rankings, unless the user specifically asks about 'Returned' items.
-2. For monthly trend or grouping by month, use `TO_CHAR(order_date, 'YYYY-MM') AS month`.
-3. When asking for top/highest product, region, or channel, include BOTH the entity name AND the aggregated revenue: `SELECT product, ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY total_revenue DESC LIMIT 1;`.
-4. When asked for revenue change between months or month-over-month comparison: `WITH m AS (SELECT TO_CHAR(order_date, 'YYYY-MM') AS month, SUM(net_revenue) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY month ORDER BY month ASC) SELECT month, ROUND(revenue::numeric, 2) AS revenue, ROUND((revenue - LAG(revenue) OVER (ORDER BY month))::numeric, 2) AS revenue_change FROM m;`
-5. Output ONLY the raw SQL query. Do NOT include markdown formatting like ```sql or ```.
-6. Do NOT include any explanations or conversational text.
-7. Destructive operations (DROP, DELETE, INSERT, UPDATE, ALTER) are strictly forbidden. Only generate SELECT queries.
-8. If and ONLY IF the question has zero relation to business, sales, transactions, products, or revenue (e.g. "tell me a joke", "what is the capital of France"), respond with: CANNOT_ANSWER
+CRITICAL RULES:
+1. Filter by `status = 'Completed'` for all sales, revenue, rankings, and trends, unless the user asks specifically about returns.
+2. For monthly trends or grouping by month, use `TO_CHAR(order_date, 'YYYY-MM') AS month`.
+3. When comparing channels, regions, categories, or products (e.g. 'Online vs Retail', 'regional sales', 'monthly trend'), GROUP BY the entity and do NOT add 'LIMIT 1' unless the user specifically asks for 'only top 1'.
+4. Output ONLY the raw SQL query. Do NOT include markdown fences, comments, or explanations.
+5. Destructive queries (DROP, DELETE, UPDATE, INSERT) are strictly prohibited. Only generate SELECT queries.
 """
 
-
 MODELS_TO_TRY = [GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-flash-latest"]
+
+
+def classify_question_intent(user_question: str) -> str:
+    """
+    Determines whether a question requires private company business records
+    from `sales_records` or is a general knowledge / educational / interview query.
+    Returns: 'DATABASE' or 'GENERAL'
+    """
+    q_lower = user_question.lower().strip()
+
+    # Clear general knowledge / educational / interview signals
+    if any(k in q_lower for k in [
+        "interview", "prepare for", "career", "resume",
+        "concept", "algorithm", "theory", "what is vectorless",
+        "capital of", "who is", "tell me a joke", "how to prepare"
+    ]):
+        return "GENERAL"
+
+    # Specific company database query signals (actual data metrics)
+    db_metrics = [
+        "total revenue", "highest revenue", "top product", "monthly trend",
+        "sales channel", "which region", "highest sales", "returned orders",
+        "units sold", "our sales", "our company", "txn", "sales records",
+        "revenue change", "how did revenue change", "average order value",
+        "profitability: online", "list all products", "how many units"
+    ]
+    if any(m in q_lower for m in db_metrics):
+        return "DATABASE"
+
+    # General concept signals (e.g. "what is gross margin", "explain inflation")
+    if any(q_lower.startswith(prefix) for prefix in [
+        "what is ", "what are ", "explain ", "how does ", "why does ", "difference between "
+    ]) and not any(k in q_lower for k in ["revenue", "sales", "product", "channel", "region", "order"]):
+        return "GENERAL"
+
+    # Fast LLM classification if ambiguous
+    if ai_client:
+        prompt = (
+            f"Determine if the user's question requires querying a private database table of sales transactions "
+            f"(e.g. company revenue numbers, order quantities, top selling items in our store) "
+            f"or if it is a general knowledge / educational / conceptual / interview question.\n\n"
+            f"User Question: \"{user_question}\"\n\n"
+            f"Reply with exactly one word: 'DATABASE' or 'GENERAL'."
+        )
+        try:
+            resp = ai_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+            verdict = resp.text.strip().upper()
+            if "GENERAL" in verdict:
+                return "GENERAL"
+            if "DATABASE" in verdict:
+                return "DATABASE"
+        except Exception:
+            pass
+
+    # Default fallback
+    return "DATABASE" if any(w in q_lower for w in ["revenue", "sales", "order", "product", "region", "channel"]) else "GENERAL"
 
 
 def generate_sql_from_question(user_question: str) -> str:
     """
     Translates a natural language question into a safe PostgreSQL SELECT query.
-    Attempts secondary models if the primary model is temporarily busy (503).
     """
     if not ai_client:
         return ""
 
-    prompt = f"{DATABASE_SCHEMA_PROMPT}\n\nUser Question: {user_question}\nSQL Query:"
-    
+    prompt = f"{SQL_TRANSLATION_PROMPT}\n\nUser Question: {user_question}\nSQL Query:"
+
     for model_name in MODELS_TO_TRY:
         try:
             response = ai_client.models.generate_content(
@@ -68,47 +157,40 @@ def generate_sql_from_question(user_question: str) -> str:
                 contents=prompt
             )
             raw_output = response.text.strip()
-            
-            if "CANNOT_ANSWER" in raw_output:
-                return "CANNOT_ANSWER"
-
-            # Clean markdown code fences if present
             clean_sql = re.sub(r"^```(sql)?", "", raw_output, flags=re.IGNORECASE).strip()
             clean_sql = re.sub(r"```$", "", clean_sql).strip()
             return clean_sql
         except Exception as e:
-            print(f"[AI Service] Model '{model_name}' error: {e}. Trying fallback...")
+            print(f"[AI Service] SQL Gen '{model_name}' error: {e}. Trying fallback...")
             continue
 
     return ""
 
 
-
-def generate_natural_answer(user_question: str, query_data: list[dict], total_records: int = None) -> str:
+def generate_grounded_business_answer(user_question: str, data: list[dict], sql_query: str) -> str:
     """
-    Generates a clear, professional, executive explanation of the query results.
-    Strictly grounded on the exact data records provided without hallucinations.
+    Synthesizes a rich, structured Markdown answer grounded in the retrieved database records,
+    strictly adhering to the 10-point system prompt.
     """
-    if not ai_client or not query_data:
+    if not ai_client:
         return ""
 
-    record_count = total_records if total_records is not None else len(query_data)
-    prompt = f"""
-You are an executive AI Business Intelligence Assistant.
-The user asked: "{user_question}"
+    prompt = f"""{SYSTEM_PROMPT}
 
-Database query returned {record_count} total record(s).
-Records data:
-{query_data}
+User Question: {user_question}
+SQL Query Executed: {sql_query}
+Database Records Retrieved:
+{data}
 
-CRITICAL ACCURACY GUIDELINES:
-1. Ground your answer strictly and completely on the data provided above.
-2. If listing items (e.g. products, categories, regions), list ALL {record_count} items from the data without omitting any. Count them accurately (e.g. if {record_count} items are present, state {record_count} items, NEVER say a different number).
-3. Format monetary values with '$' and commas (e.g. $1,445,200).
-4. Highlight key figures or entities using markdown bolding (e.g. **Monitor**, **$473,000**, **South**).
-5. Provide a direct, impactful 1-3 sentence executive answer.
-6. Do NOT mention SQL, queries, or database tables.
+Instructions:
+1. Provide a well-structured response using Markdown.
+2. Include a clear title/heading (e.g. ## Revenue Analysis or ## Product Performance).
+3. If the data has multiple records, time periods, or comparative categories, include a Markdown table (e.g. | Month | Revenue | or | Product | Revenue |).
+4. Include a section for ### Key Insights with bullet points comparing trends and explaining conclusions using evidence.
+5. In accordance with rule 6, briefly distinguish facts, assumptions, and predictions.
+6. Do NOT mention internal database table names or SQL jargon in the prose.
 """
+
     for model_name in MODELS_TO_TRY:
         try:
             response = ai_client.models.generate_content(
@@ -117,35 +199,67 @@ CRITICAL ACCURACY GUIDELINES:
             )
             return response.text.strip()
         except Exception as e:
+            print(f"[AI Service] Grounded Answer '{model_name}' error: {e}. Trying fallback...")
             continue
+
     return ""
 
 
-def generate_followup_questions(user_question: str, answer: str) -> list[str]:
+def generate_general_knowledge_answer(user_question: str) -> str:
     """
-    Generates 2-3 dynamic follow-up business questions related to the conversation.
+    Answers general knowledge, educational, interview, or analytical questions
+    using the 10-point system prompt and general knowledge.
     """
     if not ai_client:
-        return []
+        return ""
 
-    prompt = f"""
-You are an AI business intelligence advisor.
-The user asked: "{user_question}"
-Your answer was: "{answer}"
+    prompt = f"""{SYSTEM_PROMPT}
 
-Suggest 3 short, insightful follow-up business questions that the user might want to ask next based on this data.
-Return ONLY 3 questions, one per line. Do not number them or add bullet points.
+User Question: {user_question}
+
+Instructions:
+- Provide a clear, relevant, well-structured answer.
+- Use meaningful Markdown (headings, bullet lists, bold highlights, tables where appropriate).
+- Explain technical concepts in understandable language.
+- Include concrete examples when useful.
+- Avoid unnecessary repetition.
 """
+
     for model_name in MODELS_TO_TRY:
         try:
             response = ai_client.models.generate_content(
                 model=model_name,
                 contents=prompt
             )
-            lines = [line.strip().lstrip("123456789.-* ") for line in response.text.strip().split("\n") if line.strip()]
-            return lines[:3]
+            return response.text.strip()
         except Exception as e:
+            print(f"[AI Service] General Knowledge '{model_name}' error: {e}. Trying fallback...")
             continue
-    return []
+
+    return ""
 
 
+def generate_followup_questions(user_question: str, answer: str) -> list[str]:
+    """
+    Generates 2-3 dynamic follow-up business or exploration questions.
+    """
+    if not ai_client:
+        return []
+
+    prompt = f"""You are an intelligent Business AI Assistant.
+The user asked: "{user_question}"
+Your response was: "{answer[:300]}..."
+
+Suggest 3 short, relevant follow-up questions that the user might want to ask next.
+Return ONLY 3 questions, one per line. Do not number them or add bullet points.
+"""
+    try:
+        response = ai_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt
+        )
+        lines = [line.strip().lstrip("123456789.-* ") for line in response.text.strip().split("\n") if line.strip()]
+        return lines[:3]
+    except Exception as e:
+        print(f"[AI Service] Error generating follow-ups: {e}")
+        return []

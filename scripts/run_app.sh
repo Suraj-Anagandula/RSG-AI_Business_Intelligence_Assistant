@@ -1,7 +1,7 @@
 #!/bin/bash
 # Convenient runner script to start Database, Backend, and Frontend
 
-PROJECT_DIR="/home/user/suraj_project"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 echo "=========================================="
