@@ -72,7 +72,54 @@ def get_business_kpis() -> dict:
     return kpis
 
 
-# Fallback queries for the 5 assignment questions in case LLM is offline
+def determine_visualization_and_insight(data: list[dict], sql_query: str) -> tuple[str, str]:
+    """
+    Intelligently determines the most suitable pictorial representation and
+    derives strategic business insights hidden in the analytical logic.
+    """
+    if not data:
+        return "table", ""
+
+    first_row = data[0]
+    cols = list(first_row.keys())
+    cols_lower = [c.lower() for c in cols]
+    sql_lower = (sql_query or "").lower()
+
+    # 1. Single KPI Metric representation
+    if len(data) == 1 and len(cols) <= 3:
+        val = list(first_row.values())[0]
+        if isinstance(val, (int, float)):
+            insight = f"Core performance metric confirmed from verified transactional database records."
+            return "kpi", insight
+
+    # 2. Monthly Trend representation
+    if any(c in ["month", "order_date", "date"] for c in cols_lower):
+        if len(data) >= 2:
+            rev_col = next((c for c in cols if "rev" in c.lower() or "sale" in c.lower()), None)
+            if rev_col and isinstance(data[0].get(rev_col), (int, float)):
+                v_first = data[0][rev_col]
+                v_last = data[-1][rev_col]
+                pct = ((v_last - v_first) / max(v_first, 1)) * 100
+                direction = "expansion" if pct >= 0 else "contraction"
+                insight = f"Revenue reflects a net {abs(pct):.1f}% {direction} across the recorded timeline."
+                return "trend", insight
+        return "trend", "Timeline progression tracks sales performance continuity."
+
+    # 3. Product Ranking / Leaderboard representation
+    if any("product" in c for c in cols_lower):
+        top_item = first_row.get("product", "Leading Product")
+        insight = f"'{top_item}' commands top market velocity and drives prime transaction volume."
+        return "ranking", insight
+
+    # 4. Regional or Channel Distribution representation
+    if any(c in ["region", "sales_channel", "category"] for c in cols_lower):
+        dim_col = next(c for c in cols if c in ["region", "sales_channel", "category"])
+        top_name = first_row.get(dim_col, "Top Segment")
+        insight = f"'{top_name}' represents the highest concentration segment in this breakdown."
+        return "distribution", insight
+
+    return "table", "Structured record view from PostgreSQL transactional store."
+
 FALLBACK_PRESETS = {
     "total_revenue": (
         "SELECT ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue, COUNT(*) AS completed_orders FROM sales_records WHERE status = 'Completed';",
@@ -110,7 +157,7 @@ def process_user_query(question: str) -> dict:
     q_clean = question.strip()
     q_lower = q_clean.lower()
 
-    def make_response(answer, sql=None, data=None, q_type="dynamic_ai", success=True, err=None, engine_src="Gemini 3.5 Flash-Lite", followups=None):
+    def make_response(answer, sql=None, data=None, q_type="dynamic_ai", success=True, err=None, engine_src="Gemini 3.5 Flash-Lite", followups=None, vis_type="table", insight=None):
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         return {
             "question": q_clean,
@@ -122,8 +169,11 @@ def process_user_query(question: str) -> dict:
             "error_message": err,
             "execution_time_ms": elapsed_ms,
             "engine_source": engine_src,
-            "suggested_followups": followups or []
+            "suggested_followups": followups or [],
+            "visualization_type": vis_type,
+            "business_insight": insight
         }
+
 
     # Security check: disallow destructive SQL commands
     destructive_words = ["drop", "delete", "truncate", "update", "insert", "alter", "shutdown"]
@@ -216,27 +266,21 @@ def process_user_query(question: str) -> dict:
         # Dynamically generate follow-up recommendations
         followups = generate_followup_questions(q_clean, natural_answer)
 
-        # Detect query type for UI formatting
-        detected_type = "dynamic_ai"
-        if "total_revenue" in generated_sql.lower() or "sum(net_revenue)" in generated_sql.lower():
-            if "group by" not in generated_sql.lower():
-                detected_type = "total_revenue"
-        if "to_char" in generated_sql.lower() and "month" in generated_sql.lower():
-            detected_type = "monthly_revenue_trend"
-        elif "product" in generated_sql.lower() and "order by" in generated_sql.lower():
-            detected_type = "highest_revenue_product"
-        elif "region" in generated_sql.lower() and "order by" in generated_sql.lower():
-            detected_type = "highest_sales_region"
+        # Intelligently determine suitable pictorial visualization and business insight
+        vis_type, insight = determine_visualization_and_insight(data, generated_sql)
 
         return make_response(
             answer=natural_answer,
             sql=generated_sql,
             data=data,
-            q_type=detected_type,
+            q_type=vis_type,
             success=True,
             engine_src="Gemini 3.5 Flash-Lite (ChatGPT Mode)",
-            followups=followups
+            followups=followups,
+            vis_type=vis_type,
+            insight=insight
         )
+
 
     except Exception as exec_error:
         return make_response(

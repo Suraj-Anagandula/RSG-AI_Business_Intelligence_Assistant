@@ -21,8 +21,11 @@ class QuestionResponse(BaseModel):
     is_success: bool = True
     error_message: Optional[str] = None
     execution_time_ms: Optional[float] = 0.0
-    engine_source: Optional[str] = "Deterministic Engine"
+    engine_source: Optional[str] = "Gemini AI"
     suggested_followups: Optional[list[str]] = []
+    visualization_type: Optional[str] = "table"
+    business_insight: Optional[str] = None
+
 
 
 

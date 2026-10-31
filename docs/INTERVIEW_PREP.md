@@ -65,3 +65,4 @@ We implemented a **modular, framework-agnostic architecture** using FastAPI, SQL
 > 1. *Row 34 had Quantity = 0: Dropped as an invalid non-viable order.*
 > 2. *Row 51 had a missing Unit Price for 'Laptop Stand': Imputed using the median unit price of Laptop Stand ($1,200) across the rest of the dataset.*
 > 3. *Row 33 was marked as 'Returned': Preserved in the database for full transaction auditing, but filtered out with `status = 'Completed'` when computing revenue metrics."*
+

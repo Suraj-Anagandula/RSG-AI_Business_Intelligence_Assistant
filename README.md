@@ -199,3 +199,4 @@ The application supports all 5 challenge questions with verified ground truth:
 1. **Single Table Scope**: The query generator currently targets the `sales_records` table and is not yet mapped to multi-table joins.
 2. **Stateless Conversational Context**: Each natural language question is processed independently; multi-turn pronoun resolutions (e.g., *"What about last month?"*) are not yet linked to session state.
 3. **Regional Grouping Granularity**: The current dataset contains region names (North, South, East, West) without postal or city-level geo-coordinates.
+

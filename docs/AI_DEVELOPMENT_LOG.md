@@ -72,3 +72,4 @@ During the development of this challenge, the following AI tools and models were
 
 5. **Role-Based Access Control (RBAC)**:
    - Introduce authentication (JWT) and column/row-level security so regional managers can only query transactions within their assigned territory.
+

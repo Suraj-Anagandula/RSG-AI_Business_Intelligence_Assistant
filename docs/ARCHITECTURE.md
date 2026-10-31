@@ -114,3 +114,4 @@ To prevent destructive database operations and SQL injection:
 3. **Table Whitelist**: Enforces that queries strictly reference the allowed table (`sales_records`).
 4. **Read-Only Enactment**: All dynamic executions only accept statements beginning with `SELECT` or `WITH`.
 5. **Database User Isolation**: Database connection privileges are restricted to the application database.
+

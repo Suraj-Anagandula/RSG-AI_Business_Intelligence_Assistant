@@ -37,3 +37,4 @@ echo "=========================================="
 
 trap "kill $BACKEND_PID $FRONTEND_PID; exit 0" SIGINT SIGTERM
 wait
+
