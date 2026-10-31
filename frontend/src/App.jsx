@@ -13,7 +13,9 @@ import {
   Zap
 } from 'lucide-react';
 import DataVisualizer from './components/DataVisualizer';
+import ErrorBoundary from './components/ErrorBoundary';
 import { askQuestion, uploadCsvFile, fetchHealth } from './services/apiService';
+
 
 export default function App() {
   const [messages, setMessages] = useState([
@@ -190,8 +192,11 @@ export default function App() {
 
                 {/* Pictorial Representation as Per Data Suited */}
                 {msg.data && msg.data.length > 0 && (
-                  <DataVisualizer result={msg} />
+                  <ErrorBoundary>
+                    <DataVisualizer result={msg} />
+                  </ErrorBoundary>
                 )}
+
 
                 {/* Collapsible SQL Query Block */}
                 {msg.sql && (

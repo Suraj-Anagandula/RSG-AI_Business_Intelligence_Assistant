@@ -72,53 +72,39 @@ def get_business_kpis() -> dict:
     return kpis
 
 
-def determine_visualization_and_insight(data: list[dict], sql_query: str) -> tuple[str, str]:
+def determine_visualization_and_insight(data: list[dict], sql_query: str, question: str) -> tuple[str, str]:
     """
-    Intelligently determines the most suitable pictorial representation and
-    derives strategic business insights hidden in the analytical logic.
+    Intelligently determines if a visual representation is strictly needed based on
+    the user's question context (e.g. trend, ranking, breakdown).
+    Does NOT clutter responses with unnecessary visualizations when not requested.
     """
-    if not data:
-        return "table", ""
+    if not data or len(data) == 0:
+        return "none", ""
 
+    q_lower = (question or "").lower()
     first_row = data[0]
     cols = list(first_row.keys())
     cols_lower = [c.lower() for c in cols]
-    sql_lower = (sql_query or "").lower()
 
-    # 1. Single KPI Metric representation
-    if len(data) == 1 and len(cols) <= 3:
-        val = list(first_row.values())[0]
-        if isinstance(val, (int, float)):
-            insight = f"Core performance metric confirmed from verified transactional database records."
-            return "kpi", insight
+    # Only show trend if user asks for trend/monthly/progression AND there are multiple time periods
+    if len(data) >= 2 and any(k in q_lower for k in ["trend", "over time", "monthly", "by month", "progression"]):
+        if any(c in ["month", "order_date", "date"] for c in cols_lower):
+            return "trend", "Monthly progression tracking sales performance over time."
 
-    # 2. Monthly Trend representation
-    if any(c in ["month", "order_date", "date"] for c in cols_lower):
-        if len(data) >= 2:
-            rev_col = next((c for c in cols if "rev" in c.lower() or "sale" in c.lower()), None)
-            if rev_col and isinstance(data[0].get(rev_col), (int, float)):
-                v_first = data[0][rev_col]
-                v_last = data[-1][rev_col]
-                pct = ((v_last - v_first) / max(v_first, 1)) * 100
-                direction = "expansion" if pct >= 0 else "contraction"
-                insight = f"Revenue reflects a net {abs(pct):.1f}% {direction} across the recorded timeline."
-                return "trend", insight
-        return "trend", "Timeline progression tracks sales performance continuity."
+    # Only show ranking if user asks for top/best/ranking/leaderboard AND there are multiple items
+    if len(data) >= 2 and any(k in q_lower for k in ["top", "highest", "best", "rank", "leaderboard", "most"]):
+        if any("product" in c or "channel" in c for c in cols_lower):
+            return "ranking", "Leaderboard showing relative performance ranking."
 
-    # 3. Product Ranking / Leaderboard representation
-    if any("product" in c for c in cols_lower):
-        top_item = first_row.get("product", "Leading Product")
-        insight = f"'{top_item}' commands top market velocity and drives prime transaction volume."
-        return "ranking", insight
+    # Only show distribution if user asks for breakdown/by region/by channel/distribution
+    if len(data) >= 2 and any(k in q_lower for k in ["by region", "by channel", "by category", "breakdown", "distribution", "share"]):
+        if any(c in ["region", "sales_channel", "category"] for c in cols_lower):
+            top_name = first_row.get(cols[0], "Top Segment")
+            return "distribution", f"Categorical breakdown across key segments."
 
-    # 4. Regional or Channel Distribution representation
-    if any(c in ["region", "sales_channel", "category"] for c in cols_lower):
-        dim_col = next(c for c in cols if c in ["region", "sales_channel", "category"])
-        top_name = first_row.get(dim_col, "Top Segment")
-        insight = f"'{top_name}' represents the highest concentration segment in this breakdown."
-        return "distribution", insight
+    # For standard questions, keep it minimal (none) like ChatGPT
+    return "none", ""
 
-    return "table", "Structured record view from PostgreSQL transactional store."
 
 FALLBACK_PRESETS = {
     "total_revenue": (
@@ -266,8 +252,9 @@ def process_user_query(question: str) -> dict:
         # Dynamically generate follow-up recommendations
         followups = generate_followup_questions(q_clean, natural_answer)
 
-        # Intelligently determine suitable pictorial visualization and business insight
-        vis_type, insight = determine_visualization_and_insight(data, generated_sql)
+        # Intelligently determine if visual representation is needed based on context
+        vis_type, insight = determine_visualization_and_insight(data, generated_sql, q_clean)
+
 
         return make_response(
             answer=natural_answer,

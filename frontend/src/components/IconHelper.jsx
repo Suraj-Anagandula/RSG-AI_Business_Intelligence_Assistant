@@ -45,3 +45,4 @@ export function getCustomIcon(name, size = 18, color = 'currentColor') {
 
   return <Package size={size} color={color} />;
 }
+

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Table, BarChart3, Lightbulb } from 'lucide-react';
-import KpiVisualizer from './KpiVisualizer';
+import { Table, Lightbulb } from 'lucide-react';
 import RankingVisualizer from './RankingVisualizer';
 import DistributionVisualizer from './DistributionVisualizer';
 import TrendVisualizer from './TrendVisualizer';
@@ -11,59 +10,62 @@ export default function DataVisualizer({ result }) {
 
   if (!result || !result.data || result.data.length === 0) return null;
 
-  const visType = result.visualization_type || 'table';
+  const visType = result.visualization_type || 'none';
   const insight = result.business_insight;
 
+  // Don't render anything if visType is 'none' and no special insight
+  const hasVisualization = ['trend', 'ranking', 'distribution'].includes(visType);
+
   return (
-    <div style={{ marginTop: '16px' }}>
-      {/* Hidden-in-logic Strategic Business Insight */}
+    <div style={{ marginTop: '12px' }}>
+      {/* Strategic Observation (only if relevant context) */}
       {insight && (
         <div style={{
-          backgroundColor: '#eff6ff',
-          borderLeft: '4px solid #2563eb',
+          backgroundColor: '#f8fafc',
+          borderLeft: '3px solid #2563eb',
           borderRadius: '4px',
-          padding: '10px 14px',
-          fontSize: '13px',
-          color: '#1e40af',
+          padding: '8px 12px',
+          fontSize: '12px',
+          color: '#334155',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
-          marginBottom: '14px'
+          gap: '6px',
+          marginBottom: '10px'
         }}>
-          <Lightbulb size={16} color="#2563eb" />
-          <span><strong>Business Observation:</strong> {insight}</span>
+          <Lightbulb size={14} color="#2563eb" />
+          <span><strong>Observation:</strong> {insight}</span>
         </div>
       )}
 
-      {/* Pictorial Representation as Per Data Suited */}
-      {visType === 'kpi' && <KpiVisualizer data={result.data} />}
+      {/* Render pictorial representation ONLY when specifically needed by context */}
       {visType === 'ranking' && <RankingVisualizer data={result.data} />}
       {visType === 'distribution' && <DistributionVisualizer data={result.data} />}
       {visType === 'trend' && <TrendVisualizer data={result.data} />}
 
-      {/* Toggle Raw Data Table View */}
-      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => setShowRawTable(!showRawTable)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#64748b',
-            fontSize: '12px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          <Table size={13} />
-          <span>{showRawTable ? 'Hide Supporting Records' : `View Supporting Records (${result.data.length} rows)`}</span>
-        </button>
-      </div>
+      {/* Discrete Supporting Table Toggle */}
+      {result.data.length > 0 && (
+        <div style={{ marginTop: '6px' }}>
+          <button
+            onClick={() => setShowRawTable(!showRawTable)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#64748b',
+              fontSize: '11px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 0'
+            }}
+          >
+            <Table size={12} />
+            <span>{showRawTable ? 'Hide Supporting Records' : `View Data Records (${result.data.length})`}</span>
+          </button>
 
-      {(showRawTable || visType === 'table') && (
-        <DataTable data={result.data} />
+          {showRawTable && <DataTable data={result.data} />}
+        </div>
       )}
     </div>
   );
