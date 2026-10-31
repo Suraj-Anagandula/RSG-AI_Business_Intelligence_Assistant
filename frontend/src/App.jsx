@@ -4,24 +4,51 @@ import {
   User,
   Send,
   Upload,
-  Database,
-  Sparkles,
+  RotateCcw,
   Code,
   ChevronDown,
   ChevronUp,
-  RotateCcw,
-  Zap
+  Sparkles
 } from 'lucide-react';
 import DataVisualizer from './components/DataVisualizer';
 import ErrorBoundary from './components/ErrorBoundary';
-import { askQuestion, uploadCsvFile, fetchHealth } from './services/apiService';
+import { askQuestion, uploadCsvFile } from './services/apiService';
 
+// Highlights figures, percentages, currency, and quoted entity names in the answer
+function renderHighlightedText(text) {
+  if (!text) return null;
+
+  const regex = /(\$[\d,]+(?:\.\d+)?|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\b\d+(?:\.\d+)?%|'[^']+'|"[^"]+")/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, i) => {
+    if (regex.test(part)) {
+      const isQuote = part.startsWith("'") || part.startsWith('"');
+      return (
+        <span
+          key={i}
+          style={{
+            fontWeight: '700',
+            color: isQuote ? '#1d4ed8' : '#0f172a',
+            backgroundColor: isQuote ? '#eff6ff' : '#f1f5f9',
+            padding: '1px 5px',
+            borderRadius: '4px',
+            margin: '0 2px'
+          }}
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
 
 export default function App() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hello! I am your AI Sales BI Assistant. Ask me any dynamic question about sales revenue, products, channels, discounts, or monthly performance.',
+      content: 'Hello! I am your AI Sales Assistant. Ask me any question about our sales, revenue, products, channels, or regional performance.',
       followups: [
         'What is the total revenue?',
         'Which product generated the highest revenue?',
@@ -71,8 +98,6 @@ export default function App() {
         visualization_type: response.visualization_type,
         business_insight: response.business_insight,
         followups: response.suggested_followups || [],
-        execution_time_ms: response.execution_time_ms,
-        engine_source: response.engine_source,
         is_success: response.is_success
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -95,14 +120,14 @@ export default function App() {
     if (!file) return;
 
     try {
-      showNotification('Uploading and ingesting CSV into database...');
+      showNotification('Importing and updating sales data...');
       const result = await uploadCsvFile(file);
       showNotification(`Success: ${result.message}`);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `Data Updated: Successfully cleaned and imported ${result.loaded_records} records into PostgreSQL. You can now ask questions on the new data!`,
+          content: `Data Updated: Successfully loaded ${result.loaded_records} records into the sales database.`,
           followups: ['What is the new total revenue?', 'Show top products']
         }
       ]);
@@ -129,15 +154,15 @@ export default function App() {
 
   return (
     <div className="chat-app">
-      {/* Top Navbar */}
+      {/* Clean Header */}
       <header className="chat-navbar">
         <div className="brand-wrapper">
           <div className="brand-badge">
             <Bot size={20} />
           </div>
           <div>
-            <div className="brand-title">AI Business Intelligence Assistant</div>
-            <div className="brand-subtitle">Dynamic Sales Analytics Powered by PostgreSQL & Gemini</div>
+            <div className="brand-title">AI Sales Assistant</div>
+            <div className="brand-subtitle">Business Intelligence & Analytics</div>
           </div>
         </div>
 
@@ -152,7 +177,7 @@ export default function App() {
           <button
             className="nav-btn"
             onClick={() => fileInputRef.current?.click()}
-            title="Import a new CSV into PostgreSQL in one click"
+            title="Import a new sales CSV in one click"
           >
             <Upload size={14} />
             <span>Import CSV</span>
@@ -179,26 +204,19 @@ export default function App() {
               <div className="user-bubble">{msg.content}</div>
             ) : (
               <div className="assistant-content">
-                {/* Engine Source Badge */}
-                {msg.engine_source && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '11px', color: '#64748b' }}>
-                    <Zap size={12} color="#2563eb" />
-                    <span>{msg.engine_source} ({msg.execution_time_ms || 0} ms)</span>
-                  </div>
-                )}
+                {/* Highlighted Clean Answer */}
+                <div className="assistant-text">
+                  {renderHighlightedText(msg.content)}
+                </div>
 
-                {/* Natural Answer */}
-                <div className="assistant-text">{msg.content}</div>
-
-                {/* Pictorial Representation as Per Data Suited */}
+                {/* Contextual Visualizer (Only when appropriate) */}
                 {msg.data && msg.data.length > 0 && (
                   <ErrorBoundary>
                     <DataVisualizer result={msg} />
                   </ErrorBoundary>
                 )}
 
-
-                {/* Collapsible SQL Query Block */}
+                {/* Discrete Query View */}
                 {msg.sql && (
                   <SqlAccordion sql={msg.sql} />
                 )}
@@ -208,7 +226,7 @@ export default function App() {
                   <div className="followups-container">
                     <div className="followups-title">
                       <Sparkles size={13} color="#2563eb" />
-                      <span>Suggested Follow-up Inquiries:</span>
+                      <span>Suggested Follow-ups:</span>
                     </div>
                     <div className="followup-chips">
                       {msg.followups.map((q, fIdx) => (
@@ -228,7 +246,7 @@ export default function App() {
           </div>
         ))}
 
-        {/* Loading / Typing indicator */}
+        {/* Loading Indicator */}
         {isLoading && (
           <div className="message-row-assistant">
             <div className="assistant-avatar">
@@ -247,9 +265,8 @@ export default function App() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating Bottom Input Area (Like ChatGPT) */}
+      {/* Bottom Input Area */}
       <footer className="chat-input-wrapper">
-        {/* Quick Suggestion Pills */}
         <div className="preset-suggestions">
           {[
             'What is the total revenue?',
@@ -268,7 +285,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Input Bar */}
         <form
           className="input-box-container"
           onSubmit={(e) => {
@@ -279,7 +295,7 @@ export default function App() {
           <input
             type="text"
             className="chat-input-field"
-            placeholder="Ask any dynamic question about sales, products, regions, or trends..."
+            placeholder="Ask a question about sales, products, revenue, or trends..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
@@ -299,15 +315,42 @@ function SqlAccordion({ sql }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="sql-accordion">
-      <div className="sql-header" onClick={() => setIsOpen(!isOpen)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Code size={13} />
-          <span>Executed PostgreSQL Query</span>
-        </div>
-        {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </div>
-      {isOpen && <pre className="sql-code">{sql}</pre>}
+    <div style={{ marginTop: '10px' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#94a3b8',
+          fontSize: '11px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 0'
+        }}
+      >
+        <Code size={12} />
+        <span>{isOpen ? 'Hide Query' : 'View Query'}</span>
+        {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+
+      {isOpen && (
+        <pre style={{
+          marginTop: '6px',
+          backgroundColor: '#0f172a',
+          color: '#e2e8f0',
+          padding: '10px 14px',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontFamily: 'monospace',
+          overflowX: 'auto',
+          whiteSpace: 'pre-wrap'
+        }}>
+          {sql}
+        </pre>
+      )}
     </div>
   );
 }
