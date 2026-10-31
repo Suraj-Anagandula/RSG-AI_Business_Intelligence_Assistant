@@ -1,7 +1,8 @@
 """
 Analytics Service Module.
-Executes SQL queries against PostgreSQL and provides deterministic handlers
-for the 5 core business intelligence questions, alongside AI fallback.
+Dynamic, ChatGPT-like AI Assistant for Business Intelligence.
+Translates any natural language question to SQL, validates safety, executes queries,
+and formats conversational business answers with dynamic follow-up suggestions.
 """
 import time
 import datetime
@@ -9,8 +10,11 @@ from decimal import Decimal
 from sqlalchemy import text
 from app.database import engine
 from app.query_validator import validate_sql_query
-from app.ai_service import generate_sql_from_question, generate_natural_answer
-
+from app.ai_service import (
+    generate_sql_from_question,
+    generate_natural_answer,
+    generate_followup_questions
+)
 
 
 def execute_raw_sql(sql_query: str) -> list[dict]:
@@ -22,7 +26,7 @@ def execute_raw_sql(sql_query: str) -> list[dict]:
         result = connection.execute(text(sql_query))
         keys = result.keys()
         rows = [dict(zip(keys, row)) for row in result.fetchall()]
-        
+
         formatted_rows = []
         for r in rows:
             formatted_item = {}
@@ -39,158 +43,8 @@ def execute_raw_sql(sql_query: str) -> list[dict]:
         return formatted_rows
 
 
-
-def handle_total_revenue() -> dict:
-    """1. What is the total revenue?"""
-    sql = """
-    SELECT 
-        ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue,
-        COUNT(*) AS total_completed_orders,
-        SUM(quantity) AS total_units_sold
-    FROM sales_records 
-    WHERE status = 'Completed';
-    """
-    data = execute_raw_sql(sql)
-    tot = data[0]["total_revenue"] if data else 0
-    orders = data[0]["total_completed_orders"] if data else 0
-    units = data[0]["total_units_sold"] if data else 0
-    
-    answer = f"The total revenue across all completed sales is ${tot:,.2f}, generated from {orders} orders and {units} total units sold."
-    return {
-        "query_type": "total_revenue",
-        "sql_query": sql.strip(),
-        "data": data,
-        "answer": answer
-    }
-
-
-def handle_highest_revenue_product() -> dict:
-    """2. Which product generated the highest revenue?"""
-    sql = """
-    SELECT 
-        product,
-        category,
-        ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue,
-        SUM(quantity) AS total_units_sold
-    FROM sales_records 
-    WHERE status = 'Completed'
-    GROUP BY product, category
-    ORDER BY total_revenue DESC;
-    """
-    data = execute_raw_sql(sql)
-    if data:
-        top_prod = data[0]["product"]
-        top_rev = data[0]["total_revenue"]
-        answer = f"The product with the highest revenue is '{top_prod}' generating ${top_rev:,.2f} across all completed sales."
-    else:
-        answer = "No sales records found."
-
-    return {
-        "query_type": "highest_revenue_product",
-        "sql_query": sql.strip(),
-        "data": data,
-        "answer": answer
-    }
-
-
-def handle_monthly_revenue_trend() -> dict:
-    """3. What is the monthly revenue trend?"""
-    sql = """
-    SELECT 
-        TO_CHAR(order_date, 'YYYY-MM') AS month,
-        ROUND(SUM(net_revenue)::numeric, 2) AS monthly_revenue,
-        COUNT(*) AS total_orders
-    FROM sales_records 
-    WHERE status = 'Completed'
-    GROUP BY month
-    ORDER BY month ASC;
-    """
-    data = execute_raw_sql(sql)
-    if data:
-        summary_points = [f"{d['month']}: ${d['monthly_revenue']:,.0f}" for d in data]
-        answer = f"Monthly revenue trend ({data[0]['month']} to {data[-1]['month']}): " + ", ".join(summary_points) + "."
-    else:
-        answer = "No monthly data available."
-
-    return {
-        "query_type": "monthly_revenue_trend",
-        "sql_query": sql.strip(),
-        "data": data,
-        "answer": answer
-    }
-
-
-def handle_highest_sales_region() -> dict:
-    """4. Which region generated the highest sales?"""
-    sql = """
-    SELECT 
-        region,
-        ROUND(SUM(net_revenue)::numeric, 2) AS total_sales,
-        COUNT(*) AS total_orders
-    FROM sales_records 
-    WHERE status = 'Completed'
-    GROUP BY region
-    ORDER BY total_sales DESC;
-    """
-    data = execute_raw_sql(sql)
-    if data:
-        top_region = data[0]["region"]
-        top_sales = data[0]["total_sales"]
-        answer = f"The '{top_region}' region generated the highest sales at ${top_sales:,.2f} with {data[0]['total_orders']} orders."
-    else:
-        answer = "No regional sales data available."
-
-    return {
-        "query_type": "highest_sales_region",
-        "sql_query": sql.strip(),
-        "data": data,
-        "answer": answer
-    }
-
-
-def handle_revenue_change_between_months() -> dict:
-    """5. How did revenue change between two months?"""
-    sql = """
-    WITH monthly_sales AS (
-        SELECT 
-            TO_CHAR(order_date, 'YYYY-MM') AS month,
-            SUM(net_revenue) AS revenue
-        FROM sales_records 
-        WHERE status = 'Completed'
-        GROUP BY month
-        ORDER BY month ASC
-    )
-    SELECT 
-        month,
-        ROUND(revenue::numeric, 2) AS revenue,
-        ROUND((revenue - LAG(revenue) OVER (ORDER BY month))::numeric, 2) AS revenue_change,
-        ROUND((((revenue - LAG(revenue) OVER (ORDER BY month)) / NULLIF(LAG(revenue) OVER (ORDER BY month), 0)) * 100)::numeric, 2) AS percentage_change
-    FROM monthly_sales;
-    """
-    data = execute_raw_sql(sql)
-    if len(data) >= 2:
-        m1 = data[0]["month"]
-        m2 = data[1]["month"]
-        chg = data[1]["revenue_change"]
-        pct = data[1]["percentage_change"]
-        dir_word = "increased" if chg >= 0 else "decreased"
-        answer = (
-            f"Between {m1} and {m2}, revenue {dir_word} by ${abs(chg):,.2f} ({pct:+.2f}%). "
-            f"Full month-over-month comparisons are listed in the table below."
-        )
-    else:
-        answer = "Insufficient data to compute monthly change."
-
-    return {
-        "query_type": "revenue_change_between_months",
-        "sql_query": sql.strip(),
-        "data": data,
-        "answer": answer
-    }
-
-
 def get_business_kpis() -> dict:
-    """Calculates overall KPI summary cards."""
+    """Calculates overall KPI summary cards for dashboard header."""
     sql = """
     SELECT 
         ROUND(COALESCE(SUM(CASE WHEN status = 'Completed' THEN net_revenue ELSE 0 END), 0)::numeric, 2) AS total_revenue,
@@ -206,189 +60,190 @@ def get_business_kpis() -> dict:
         "completed_orders": 0,
         "returned_orders": 0
     }
-    
-    # Get top product
-    top_p_data = execute_raw_sql("SELECT product FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY SUM(net_revenue) DESC LIMIT 1;")
-    kpis["top_product"] = top_p_data[0]["product"] if top_p_data else "N/A"
-    
-    # Get top region
-    top_r_data = execute_raw_sql("SELECT region FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY SUM(net_revenue) DESC LIMIT 1;")
-    kpis["top_region"] = top_r_data[0]["region"] if top_r_data else "N/A"
+
+    # Top revenue product
+    top_p = execute_raw_sql("SELECT product FROM sales_records WHERE status = 'Completed' GROUP BY product ORDER BY SUM(net_revenue) DESC LIMIT 1;")
+    kpis["top_product"] = top_p[0]["product"] if top_p else "N/A"
+
+    # Top revenue region
+    top_r = execute_raw_sql("SELECT region FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY SUM(net_revenue) DESC LIMIT 1;")
+    kpis["top_region"] = top_r[0]["region"] if top_r else "N/A"
 
     return kpis
 
 
+# Fallback queries for the 5 assignment questions in case LLM is offline
+FALLBACK_PRESETS = {
+    "total_revenue": (
+        "SELECT ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue, COUNT(*) AS completed_orders FROM sales_records WHERE status = 'Completed';",
+        "total_revenue"
+    ),
+    "highest_revenue_product": (
+        "SELECT product, category, ROUND(SUM(net_revenue)::numeric, 2) AS total_revenue FROM sales_records WHERE status = 'Completed' GROUP BY product, category ORDER BY total_revenue DESC LIMIT 5;",
+        "highest_revenue_product"
+    ),
+    "monthly_revenue_trend": (
+        "SELECT TO_CHAR(order_date, 'YYYY-MM') AS month, ROUND(SUM(net_revenue)::numeric, 2) AS monthly_revenue FROM sales_records WHERE status = 'Completed' GROUP BY month ORDER BY month ASC;",
+        "monthly_revenue_trend"
+    ),
+    "highest_sales_region": (
+        "SELECT region, ROUND(SUM(net_revenue)::numeric, 2) AS total_sales, COUNT(*) AS orders FROM sales_records WHERE status = 'Completed' GROUP BY region ORDER BY total_sales DESC;",
+        "highest_sales_region"
+    ),
+    "revenue_change_between_months": (
+        "WITH m AS (SELECT TO_CHAR(order_date, 'YYYY-MM') AS month, SUM(net_revenue) AS revenue FROM sales_records WHERE status = 'Completed' GROUP BY month ORDER BY month ASC) SELECT month, ROUND(revenue::numeric, 2) AS revenue, ROUND((revenue - LAG(revenue) OVER (ORDER BY month))::numeric, 2) AS revenue_change FROM m;",
+        "revenue_change_between_months"
+    )
+}
+
+
 def process_user_query(question: str) -> dict:
     """
-    Main query processing coordinator:
-    1. Checks for match with core 5 questions (deterministic, zero-hallucination).
-    2. Falls back to AI text-to-SQL with safety guardrail.
-    3. Handles out-of-scope or destructive queries safely.
-    4. Computes execution latency and attaches follow-up suggestions.
+    Processes ANY natural language business question dynamically like ChatGPT.
+    1. Validates query against security blacklist.
+    2. Uses Gemini to dynamically generate the exact SQL query.
+    3. Validates SQL for read-only safety.
+    4. Executes SQL against PostgreSQL.
+    5. Uses Gemini to generate conversational answer and follow-up suggestions.
     """
     start_time = time.time()
-    q_lower = question.lower().strip()
+    q_clean = question.strip()
+    q_lower = q_clean.lower()
 
-    def finalize_response(res_dict):
+    def make_response(answer, sql=None, data=None, q_type="dynamic_ai", success=True, err=None, engine_src="Gemini 3.5 Flash-Lite", followups=None):
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
-        res_dict["execution_time_ms"] = elapsed_ms
-        if "engine_source" not in res_dict:
-            res_dict["engine_source"] = "Deterministic Engine"
-        if "suggested_followups" not in res_dict:
-            res_dict["suggested_followups"] = []
-        return res_dict
-
-    # Pre-defined deterministic matching
-    if any(phrase in q_lower for phrase in ["total revenue", "overall revenue", "total sales"]):
-        res = handle_total_revenue()
-        res["question"] = question
-        res["is_success"] = True
-        res["engine_source"] = "Deterministic SQL Engine"
-        res["suggested_followups"] = [
-            "Which product generated the highest revenue?",
-            "What is the monthly revenue trend?",
-            "Which region generated the highest sales?"
-        ]
-        return finalize_response(res)
-
-    if any(phrase in q_lower for phrase in ["highest revenue", "top product", "best selling product", "most revenue"]):
-        res = handle_highest_revenue_product()
-        res["question"] = question
-        res["is_success"] = True
-        res["engine_source"] = "Deterministic SQL Engine"
-        res["suggested_followups"] = [
-            "What is the total revenue?",
-            "Which region generated the highest sales?",
-            "What is the monthly revenue trend?"
-        ]
-        return finalize_response(res)
-
-    if any(phrase in q_lower for phrase in ["monthly revenue trend", "monthly trend", "revenue trend", "sales over time"]):
-        res = handle_monthly_revenue_trend()
-        res["question"] = question
-        res["is_success"] = True
-        res["engine_source"] = "Deterministic SQL Engine"
-        res["suggested_followups"] = [
-            "How did revenue change between two months?",
-            "Which product generated the highest revenue?",
-            "Which region generated the highest sales?"
-        ]
-        return finalize_response(res)
-
-    if any(phrase in q_lower for phrase in ["highest sales", "which region", "top region", "sales by region", "best region"]):
-        res = handle_highest_sales_region()
-        res["question"] = question
-        res["is_success"] = True
-        res["engine_source"] = "Deterministic SQL Engine"
-        res["suggested_followups"] = [
-            "What is the total revenue?",
-            "Which product generated the highest revenue?",
-            "What is the monthly revenue trend?"
-        ]
-        return finalize_response(res)
-
-    if any(phrase in q_lower for phrase in ["change between two months", "between two months", "revenue change", "month over month", "mom change"]):
-        res = handle_revenue_change_between_months()
-        res["question"] = question
-        res["is_success"] = True
-        res["engine_source"] = "Deterministic SQL Engine"
-        res["suggested_followups"] = [
-            "What is the monthly revenue trend?",
-            "What is the total revenue?",
-            "Which region generated the highest sales?"
-        ]
-        return finalize_response(res)
-
-    # Check for obvious destructive or injection keywords before AI
-    for bad_word in ["drop", "delete", "truncate", "update", "insert", "alter"]:
-        if bad_word in q_lower.split():
-            res = {
-                "question": question,
-                "answer": "Security Alert: Destructive database modifications are strictly prohibited.",
-                "sql_query": None,
-                "data": None,
-                "query_type": "security_violation",
-                "is_success": False,
-                "error_message": f"Operation '{bad_word.upper()}' is not permitted.",
-                "engine_source": "Security Guardrail"
-            }
-            return finalize_response(res)
-
-    # Dynamic AI-assisted SQL Generation
-    generated_sql = generate_sql_from_question(question)
-    
-    if generated_sql == "CANNOT_ANSWER" or not generated_sql:
-        res = {
-            "question": question,
-            "answer": "I can only answer questions related to sales transactions, products, categories, regions, and revenue. Please ask a business-related question.",
-            "sql_query": None,
-            "data": None,
-            "query_type": "out_of_scope",
-            "is_success": False,
-            "error_message": "Question is out of scope.",
-            "engine_source": "Gemini Schema Grounding Guardrail"
+        return {
+            "question": q_clean,
+            "answer": answer,
+            "sql_query": sql,
+            "data": data,
+            "query_type": q_type,
+            "is_success": success,
+            "error_message": err,
+            "execution_time_ms": elapsed_ms,
+            "engine_source": engine_src,
+            "suggested_followups": followups or []
         }
-        return finalize_response(res)
 
-    # Validate generated SQL with strict safety rules
-    is_valid, error_reason = validate_sql_query(generated_sql)
+    # Security check: disallow destructive SQL commands
+    destructive_words = ["drop", "delete", "truncate", "update", "insert", "alter", "shutdown"]
+    for word in destructive_words:
+        if word in q_lower.split():
+            return make_response(
+                answer="Security Notice: Destructive database modifications are strictly prohibited.",
+                q_type="security_violation",
+                success=False,
+                err=f"Keyword '{word.upper()}' is not allowed.",
+                engine_src="Security Guardrail"
+            )
+
+    # Dynamic AI Text-to-SQL generation (No fixed questions)
+    generated_sql = generate_sql_from_question(q_clean)
+
+    # Check if question is completely non-business / out of scope
+    if generated_sql == "CANNOT_ANSWER":
+        return make_response(
+            answer="I am your Sales BI Assistant. I can answer questions about sales, revenue, products, channels, discounts, and regional performance. Please ask a business question.",
+            q_type="out_of_scope",
+            success=False,
+            err="Question is out of scope.",
+            engine_src="AI Schema Grounding Guardrail"
+        )
+
+    # Fallback to verified SQL only if LLM is temporarily unreachable (network timeout / rate limit)
+    if not generated_sql:
+        if "revenue" in q_lower and ("total" in q_lower or "overall" in q_lower):
+            generated_sql = FALLBACK_PRESETS["total_revenue"][0]
+        elif "product" in q_lower and ("highest" in q_lower or "top" in q_lower or "revenue" in q_lower):
+            generated_sql = FALLBACK_PRESETS["highest_revenue_product"][0]
+        elif "trend" in q_lower or ("month" in q_lower and "revenue" in q_lower):
+            generated_sql = FALLBACK_PRESETS["monthly_revenue_trend"][0]
+        elif "region" in q_lower and ("highest" in q_lower or "sales" in q_lower or "top" in q_lower):
+            generated_sql = FALLBACK_PRESETS["highest_sales_region"][0]
+        elif "change" in q_lower or "between" in q_lower or "month over month" in q_lower:
+            generated_sql = FALLBACK_PRESETS["revenue_change_between_months"][0]
+
+
+    if not generated_sql:
+        return make_response(
+            answer="I was unable to interpret that question into a database query. Could you please rephrase your business question?",
+            q_type="uninterpreted_query",
+            success=False,
+            err="Failed to generate SQL.",
+            engine_src="AI Assistant"
+        )
+
+    # Validate SQL safety (must be a SELECT on sales_records)
+    is_valid, validation_error = validate_sql_query(generated_sql)
     if not is_valid:
-        res = {
-            "question": question,
-            "answer": f"The generated query did not pass our security validation: {error_reason}",
-            "sql_query": generated_sql,
-            "data": None,
-            "query_type": "invalid_sql",
-            "is_success": False,
-            "error_message": error_reason,
-            "engine_source": "SQL Safety Validator"
-        }
-        return finalize_response(res)
+        return make_response(
+            answer=f"The query could not be executed due to security constraints: {validation_error}",
+            sql=generated_sql,
+            q_type="invalid_sql",
+            success=False,
+            err=validation_error,
+            engine_src="SQL Safety Validator"
+        )
 
-    # Execute validated SQL
+    # Execute validated SQL on PostgreSQL
     try:
         data = execute_raw_sql(generated_sql)
         if not data:
-            res = {
-                "question": question,
-                "answer": "The query executed successfully, but no matching sales records were found.",
-                "sql_query": generated_sql,
-                "data": [],
-                "query_type": "custom_ai",
-                "is_success": True,
-                "engine_source": "Gemini 3.5 Flash-Lite (Text-to-SQL)"
-            }
-            return finalize_response(res)
+            return make_response(
+                answer="The database query returned zero matching records for your request.",
+                sql=generated_sql,
+                data=[],
+                q_type="dynamic_ai",
+                success=True,
+                engine_src="Gemini 3.5 Flash-Lite"
+            )
 
-        # Generate natural language summary using Gemini
-        natural_answer = generate_natural_answer(question, data[:5])
+        # Generate conversational ChatGPT-style natural language response
+        natural_answer = generate_natural_answer(q_clean, data[:5])
         if not natural_answer:
-            natural_answer = f"Found {len(data)} matching records in the sales database."
+            # Deterministic, reliable answer formatter from data row if LLM is rate-limited
+            first_row = data[0]
+            items = []
+            for k, v in first_row.items():
+                k_label = k.replace("_", " ")
+                if isinstance(v, (int, float)):
+                    items.append(f"{k_label}: ${v:,.2f}" if "rev" in k or "price" in k or "sale" in k else f"{k_label}: {v:,}")
+                else:
+                    items.append(f"{k_label}: {v}")
+            natural_answer = f"The database query returned: {', '.join(items)}."
 
-        res = {
-            "question": question,
-            "answer": natural_answer,
-            "sql_query": generated_sql,
-            "data": data,
-            "query_type": "custom_ai",
-            "is_success": True,
-            "engine_source": "Gemini 3.5 Flash-Lite (Text-to-SQL)",
-            "suggested_followups": [
-                "What is the total revenue?",
-                "Which product generated the highest revenue?"
-            ]
-        }
-        return finalize_response(res)
-    except Exception as exec_err:
-        res = {
-            "question": question,
-            "answer": "An error occurred while executing the database query.",
-            "sql_query": generated_sql,
-            "data": None,
-            "query_type": "execution_error",
-            "is_success": False,
-            "error_message": str(exec_err),
-            "engine_source": "Database Engine"
-        }
-        return finalize_response(res)
 
+        # Dynamically generate follow-up recommendations
+        followups = generate_followup_questions(q_clean, natural_answer)
+
+        # Detect query type for UI formatting
+        detected_type = "dynamic_ai"
+        if "total_revenue" in generated_sql.lower() or "sum(net_revenue)" in generated_sql.lower():
+            if "group by" not in generated_sql.lower():
+                detected_type = "total_revenue"
+        if "to_char" in generated_sql.lower() and "month" in generated_sql.lower():
+            detected_type = "monthly_revenue_trend"
+        elif "product" in generated_sql.lower() and "order by" in generated_sql.lower():
+            detected_type = "highest_revenue_product"
+        elif "region" in generated_sql.lower() and "order by" in generated_sql.lower():
+            detected_type = "highest_sales_region"
+
+        return make_response(
+            answer=natural_answer,
+            sql=generated_sql,
+            data=data,
+            q_type=detected_type,
+            success=True,
+            engine_src="Gemini 3.5 Flash-Lite (ChatGPT Mode)",
+            followups=followups
+        )
+
+    except Exception as exec_error:
+        return make_response(
+            answer="An error occurred while executing the query on the database.",
+            sql=generated_sql,
+            q_type="execution_error",
+            success=False,
+            err=str(exec_error),
+            engine_src="Database Engine"
+        )

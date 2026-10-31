@@ -46,31 +46,40 @@ CRITICAL BUSINESS RULES:
 """
 
 
+MODELS_TO_TRY = [GEMINI_MODEL, "gemini-3.1-flash-lite", "gemini-flash-latest"]
+
+
 def generate_sql_from_question(user_question: str) -> str:
     """
     Translates a natural language question into a safe PostgreSQL SELECT query.
+    Attempts secondary models if the primary model is temporarily busy (503).
     """
     if not ai_client:
         return ""
 
     prompt = f"{DATABASE_SCHEMA_PROMPT}\n\nUser Question: {user_question}\nSQL Query:"
-    try:
-        response = ai_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        raw_output = response.text.strip()
-        
-        if "CANNOT_ANSWER" in raw_output:
-            return "CANNOT_ANSWER"
+    
+    for model_name in MODELS_TO_TRY:
+        try:
+            response = ai_client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            raw_output = response.text.strip()
+            
+            if "CANNOT_ANSWER" in raw_output:
+                return "CANNOT_ANSWER"
 
-        # Clean markdown code fences if present
-        clean_sql = re.sub(r"^```(sql)?", "", raw_output, flags=re.IGNORECASE).strip()
-        clean_sql = re.sub(r"```$", "", clean_sql).strip()
-        return clean_sql
-    except Exception as e:
-        print(f"[AI Service] Error generating SQL: {e}")
-        return ""
+            # Clean markdown code fences if present
+            clean_sql = re.sub(r"^```(sql)?", "", raw_output, flags=re.IGNORECASE).strip()
+            clean_sql = re.sub(r"```$", "", clean_sql).strip()
+            return clean_sql
+        except Exception as e:
+            print(f"[AI Service] Model '{model_name}' error: {e}. Trying fallback...")
+            continue
+
+    return ""
+
 
 
 def generate_natural_answer(user_question: str, query_data: list[dict]) -> str:
@@ -81,7 +90,7 @@ def generate_natural_answer(user_question: str, query_data: list[dict]) -> str:
         return ""
 
     prompt = f"""
-You are a business intelligence assistant.
+You are a business intelligence assistant (like ChatGPT for business).
 A user asked: "{user_question}"
 The database returned the following data records:
 {query_data}
@@ -98,4 +107,32 @@ Do not mention SQL or technical database terms. Format monetary values with comm
     except Exception as e:
         print(f"[AI Service] Error generating natural answer: {e}")
         return ""
+
+
+def generate_followup_questions(user_question: str, answer: str) -> list[str]:
+    """
+    Generates 2-3 dynamic follow-up business questions related to the conversation.
+    """
+    if not ai_client:
+        return []
+
+    prompt = f"""
+You are an AI business intelligence advisor.
+The user asked: "{user_question}"
+Your answer was: "{answer}"
+
+Suggest 3 short, insightful follow-up business questions that the user might want to ask next based on this data.
+Return ONLY 3 questions, one per line. Do not number them or add bullet points.
+"""
+    try:
+        response = ai_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt
+        )
+        lines = [line.strip().lstrip("123456789.-* ") for line in response.text.strip().split("\n") if line.strip()]
+        return lines[:3]
+    except Exception as e:
+        print(f"[AI Service] Error generating follow-ups: {e}")
+        return []
+
 
