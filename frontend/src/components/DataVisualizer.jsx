@@ -13,26 +13,23 @@ export default function DataVisualizer({ result }) {
   const visType = result.visualization_type || 'none';
   const insight = result.business_insight;
 
-  // Don't render anything if visType is 'none' and no special insight
-  const hasVisualization = ['trend', 'ranking', 'distribution'].includes(visType);
-
   return (
     <div style={{ marginTop: '12px' }}>
-      {/* Strategic Observation (only if relevant context) */}
+      {/* Strategic Observation (in neutral gray/charcoal) */}
       {insight && (
         <div style={{
-          backgroundColor: '#f8fafc',
-          borderLeft: '3px solid #2563eb',
+          backgroundColor: '#f4f4f5',
+          borderLeft: '3px solid #18181b',
           borderRadius: '4px',
           padding: '8px 12px',
           fontSize: '12px',
-          color: '#334155',
+          color: '#27272a',
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
           marginBottom: '10px'
         }}>
-          <Lightbulb size={14} color="#2563eb" />
+          <Lightbulb size={14} color="#18181b" />
           <span><strong>Observation:</strong> {insight}</span>
         </div>
       )}
@@ -50,7 +47,7 @@ export default function DataVisualizer({ result }) {
             style={{
               background: 'none',
               border: 'none',
-              color: '#64748b',
+              color: '#71717a',
               fontSize: '11px',
               fontWeight: '500',
               cursor: 'pointer',

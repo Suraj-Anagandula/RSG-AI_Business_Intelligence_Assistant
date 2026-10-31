@@ -19,16 +19,16 @@ export default function DistributionVisualizer({ data }) {
                      (valKey || '').toLowerCase().includes('sale') ||
                      (valKey || '').toLowerCase().includes('price');
 
-  const palette = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+  const palette = ['#18181b', '#3f3f46', '#71717a', '#a1a1aa', '#d4d4d8'];
 
   return (
-    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', margin: '14px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>
-        <PieChart size={16} color="#2563eb" />
+    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', margin: '14px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', fontSize: '13px', fontWeight: '700', color: '#111827' }}>
+        <PieChart size={16} color="#18181b" />
         <span>Categorical Breakdown ({dimKey.replace(/_/g, ' ')})</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px' }}>
         {data.map((item, idx) => {
           const name = item[dimKey];
           const val = Number(item[valKey]) || 0;
@@ -39,10 +39,10 @@ export default function DistributionVisualizer({ data }) {
             <div
               key={idx}
               style={{
-                border: '1px solid #e2e8f0',
+                border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 padding: '12px',
-                backgroundColor: '#f8fafc',
+                backgroundColor: '#f9fafb',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between'
@@ -50,17 +50,17 @@ export default function DistributionVisualizer({ data }) {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color }}>{getCustomIcon(name, 16, color)}</span>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#1e293b' }}>{name}</span>
+                  <span style={{ color: '#374151' }}>{getCustomIcon(name, 16, '#374151')}</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{name}</span>
                 </div>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>{share}%</span>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: '#6b7280' }}>{share}%</span>
               </div>
 
               <div style={{ marginTop: '10px' }}>
-                <div style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
                   {isCurrency ? `$${val.toLocaleString()}` : val.toLocaleString()}
                 </div>
-                <div style={{ height: '4px', width: '100%', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
+                <div style={{ height: '4px', width: '100%', backgroundColor: '#e5e7eb', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${share}%`, backgroundColor: color, borderRadius: '2px' }} />
                 </div>
               </div>

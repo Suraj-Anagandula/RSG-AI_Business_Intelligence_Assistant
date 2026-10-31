@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Sparkles,
+  Bot,
+  User,
   Send,
   Upload,
   Plus,
@@ -10,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
-  BarChart3,
+  Sparkles,
   TrendingUp,
   Compass,
   Store,
@@ -21,7 +22,7 @@ import DataVisualizer from './components/DataVisualizer';
 import ErrorBoundary from './components/ErrorBoundary';
 import { askQuestion, uploadCsvFile } from './services/apiService';
 
-// Renders numbers, currency, percentages, and quoted entities with clean highlight styling
+// Renders numbers, currency, percentages, and quoted entities in clean monochromatic pills
 function renderHighlightedText(text) {
   if (!text) return null;
 
@@ -48,12 +49,12 @@ export default function App() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hello! I am your AI Business Intelligence Assistant. Ask me any question about our sales, revenue performance, product rankings, channels, or regional distributions.',
+      content: 'Hello! I am your AI Business Intelligence Assistant. Ask me any question about our sales, revenue, products, channels, or regional performance.',
       followups: [
         'What is the total revenue?',
         'Which product generated the highest revenue?',
         'What is the monthly revenue trend?',
-        'Which sales channel has higher sales: Online or Retail?',
+        'Which sales channel is more profitable: Online or Retail?',
         'Which region generated the highest sales?'
       ]
     }
@@ -120,7 +121,7 @@ export default function App() {
     if (!file) return;
 
     try {
-      showNotification('Cleaning and ingesting CSV into database...');
+      showNotification('Importing and updating database records...');
       const result = await uploadCsvFile(file);
       showNotification(`Success: ${result.message}`);
       setMessages((prev) => [
@@ -162,81 +163,78 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      {/* ChatGPT-Style Sidebar */}
+      {/* Left Closable Sidebar */}
       <aside className={`sidebar ${isSidebarOpen ? '' : 'closed'}`}>
-        <button className="new-chat-btn" onClick={handleNewChat} title="Start new conversation">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Plus size={16} />
-            <span>New inquiry</span>
-          </div>
-          <span style={{ fontSize: '11px', color: '#94a3b8' }}>⌘K</span>
-        </button>
-
-        <div className="sidebar-section-title">Core Explorations</div>
-        <nav className="sidebar-nav-list">
-          {presetShortcuts.map((item, idx) => (
-            <button
-              key={idx}
-              className="sidebar-nav-item"
-              onClick={() => handleSend(item.query)}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="status-indicator">
-            <div className="status-dot" />
-            <span>PostgreSQL 16 Connected</span>
-          </div>
-
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept=".csv"
-            onChange={handleFileUpload}
-          />
-          <button
-            className="upload-action-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Import a new CSV into PostgreSQL"
-          >
-            <Upload size={14} />
-            <span>Import CSV to DB</span>
+        <div className="sidebar-inner">
+          <button className="new-chat-btn" onClick={handleNewChat} title="Start new conversation">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Plus size={16} />
+              <span>New inquiry</span>
+            </div>
           </button>
+
+          <div className="sidebar-section-title">Core Explorations</div>
+          <nav className="sidebar-nav-list">
+            {presetShortcuts.map((item, idx) => (
+              <button
+                key={idx}
+                className="sidebar-nav-item"
+                onClick={() => handleSend(item.query)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-footer">
+            <div className="status-indicator">
+              <div className="status-dot" />
+              <span>PostgreSQL 16 Connected</span>
+            </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".csv"
+              onChange={handleFileUpload}
+            />
+            <button
+              className="upload-action-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Import a new CSV into PostgreSQL"
+            >
+              <Upload size={14} />
+              <span>Import CSV to DB</span>
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Chat Column */}
       <main className="main-chat-container">
-        {/* Top Glass Navbar */}
-        <header className="chat-glass-nav">
+        {/* Top Navbar */}
+        <header className="chat-navbar">
           <div className="nav-left">
             <button
               className="toggle-sidebar-btn"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              title={isSidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
+              title={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             >
               {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
             </button>
 
-            <div className="assistant-title-group">
-              <span className="gradient-title">AI Sales BI Assistant</span>
-            </div>
+            <span className="assistant-title">AI Business Intelligence Assistant</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              className="toggle-sidebar-btn"
-              onClick={handleNewChat}
-              title="Reset conversation"
-            >
-              <RotateCcw size={15} />
-            </button>
-          </div>
+          <button
+            className="toggle-sidebar-btn"
+            onClick={handleNewChat}
+            title="Reset conversation"
+          >
+            <RotateCcw size={15} />
+          </button>
         </header>
 
         {/* Scrollable Message Thread */}
@@ -250,11 +248,11 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="chat-bubble-assistant-row">
-                    <div className="assistant-avatar-glow">
-                      <Sparkles size={18} />
+                    <div className="assistant-avatar">
+                      <Bot size={18} />
                     </div>
 
-                    <div className="assistant-glass-card">
+                    <div className="assistant-card">
                       {/* Highlighted Conversational Answer */}
                       <div className="response-prose">
                         {renderHighlightedText(msg.content)}
@@ -276,7 +274,7 @@ export default function App() {
                       {msg.followups && msg.followups.length > 0 && (
                         <div className="followups-wrapper">
                           <div className="followups-headline">
-                            <Sparkles size={12} color="#2563eb" />
+                            <Sparkles size={12} color="#18181b" />
                             <span>Suggested Follow-ups</span>
                           </div>
                           <div className="followups-pill-row">
@@ -301,10 +299,10 @@ export default function App() {
             {/* Typing Loader */}
             {isLoading && (
               <div className="chat-bubble-assistant-row">
-                <div className="assistant-avatar-glow">
-                  <Sparkles size={18} />
+                <div className="assistant-avatar">
+                  <Bot size={18} />
                 </div>
-                <div className="assistant-glass-card" style={{ padding: '14px 20px', maxWidth: '100px' }}>
+                <div className="assistant-card" style={{ padding: '12px 18px', width: 'fit-content' }}>
                   <div className="typing-dots">
                     <div className="dot" />
                     <div className="dot" />
@@ -318,8 +316,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Floating Glass Input Zone */}
-        <div className="floating-input-zone">
+        {/* Bottom Input Area in Normal Flex Flow (Zero Overlap Guaranteed) */}
+        <footer className="chat-input-bottom-zone">
           <div className="input-capsule-container">
             {/* Quick Suggestions Pills */}
             <div className="suggestions-horizontal-bar">
@@ -340,9 +338,9 @@ export default function App() {
               ))}
             </div>
 
-            {/* Input Capsule */}
+            {/* Input Box */}
             <form
-              className="input-glass-pill"
+              className="input-box"
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSend();
@@ -358,18 +356,18 @@ export default function App() {
               />
               <button
                 type="submit"
-                className="glass-send-btn"
+                className="send-btn-black"
                 disabled={isLoading || !input.trim()}
                 title="Send query"
               >
-                <Send size={15} />
+                <Send size={14} />
               </button>
             </form>
           </div>
-        </div>
+        </footer>
       </main>
 
-      {notification && <div className="glass-toast">{notification}</div>}
+      {notification && <div className="toast-bar">{notification}</div>}
     </div>
   );
 }

@@ -19,13 +19,13 @@ export default function TrendVisualizer({ data }) {
                      (valKey || '').toLowerCase().includes('price');
 
   return (
-    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', margin: '14px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>
-        <TrendingUp size={16} color="#2563eb" />
+    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', margin: '14px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '13px', fontWeight: '700', color: '#111827' }}>
+        <TrendingUp size={16} color="#18181b" />
         <span>Timeline Progression ({timeKey.replace(/_/g, ' ')})</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '160px', paddingTop: '16px', borderBottom: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '150px', paddingTop: '16px', borderBottom: '1px solid #e5e7eb' }}>
         {data.map((item, idx) => {
           const val = Number(item[valKey]) || 0;
           const heightPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
@@ -33,21 +33,21 @@ export default function TrendVisualizer({ data }) {
 
           return (
             <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-              <span style={{ fontSize: '10px', fontWeight: isPeak ? '700' : '500', color: isPeak ? '#2563eb' : '#64748b', marginBottom: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: isPeak ? '700' : '500', color: isPeak ? '#18181b' : '#6b7280', marginBottom: '4px' }}>
                 {isCurrency ? `$${Math.round(val / 1000)}k` : val}
               </span>
               <div
                 style={{
                   width: '100%',
                   maxWidth: '38px',
-                  backgroundColor: isPeak ? '#2563eb' : '#93c5fd',
+                  backgroundColor: isPeak ? '#18181b' : '#d1d5db',
                   borderRadius: '3px 3px 0 0',
                   height: `${Math.max(heightPct, 6)}%`,
-                  transition: 'height 0.3s ease'
+                  transition: 'height 0.25s ease'
                 }}
                 title={`${item[timeKey]}: ${isCurrency ? '$' : ''}${val.toLocaleString()}`}
               />
-              <span style={{ fontSize: '10px', color: '#64748b', marginTop: '6px', fontWeight: '500' }}>
+              <span style={{ fontSize: '10px', color: '#4b5563', marginTop: '6px', fontWeight: '500' }}>
                 {item[timeKey]}
               </span>
             </div>

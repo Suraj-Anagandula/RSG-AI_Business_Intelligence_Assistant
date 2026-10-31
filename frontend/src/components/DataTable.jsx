@@ -37,48 +37,52 @@ export default function DataTable({ data }) {
   };
 
   return (
-    <div className="table-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div className="table-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-          <Table size={18} />
-          <span>Supporting Database Records ({data.length} rows)</span>
+    <div style={{ marginTop: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '600', color: '#374151' }}>
+          <Table size={14} />
+          <span>Supporting Records ({data.length})</span>
         </div>
         <button
           onClick={handleDownloadCsv}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '5px',
             backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
+            border: '1px solid #d1d5db',
             borderRadius: '6px',
-            padding: '6px 12px',
-            fontSize: '12px',
+            padding: '4px 10px',
+            fontSize: '11px',
             fontWeight: '500',
             cursor: 'pointer',
-            color: '#334155'
+            color: '#111827'
           }}
-          title="Download records as CSV for Excel"
+          title="Download records as CSV"
         >
-          <Download size={14} />
+          <Download size={12} />
           <span>Export CSV</span>
         </button>
       </div>
 
-      <div className="table-wrapper">
-        <table className="data-table">
+      <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
           <thead>
-            <tr>
+            <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
               {columns.map((col) => (
-                <th key={col}>{col.replace(/_/g, ' ')}</th>
+                <th key={col} style={{ padding: '8px 12px', fontWeight: '600', color: '#4b5563', textTransform: 'capitalize' }}>
+                  {col.replace(/_/g, ' ')}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.map((row, idx) => (
-              <tr key={idx}>
+              <tr key={idx} style={{ borderBottom: idx === data.length - 1 ? 'none' : '1px solid #f3f4f6' }}>
                 {columns.map((col) => (
-                  <td key={col}>{formatCellValue(row[col])}</td>
+                  <td key={col} style={{ padding: '8px 12px', color: '#1f2937' }}>
+                    {formatCellValue(row[col])}
+                  </td>
                 ))}
               </tr>
             ))}
